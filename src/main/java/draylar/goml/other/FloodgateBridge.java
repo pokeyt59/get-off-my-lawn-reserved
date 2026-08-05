@@ -2,8 +2,11 @@ package draylar.goml.other;
 
 import draylar.goml.GetOffMyLawn;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.players.NameAndId;
 
 import java.lang.reflect.Method;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -18,9 +21,14 @@ import java.util.UUID;
 public class FloodgateBridge {
     public static final boolean IS_LOADED = FabricLoader.getInstance().isModLoaded("floodgate");
 
-    private static boolean resolved = false;
-    private static Object apiInstance = null;
-    private static Method isFloodgatePlayer = null;
+    /** Floodgate's own default, used only when it's installed but its config can't be read. */
+    private static final String DEFAULT_PREFIX = ".";
+
+    // Read from both the server thread and the async name lookup in NamePlayerSelectorGui.
+    private static volatile boolean resolved = false;
+    private static volatile Object apiInstance = null;
+    private static volatile Method isFloodgatePlayer = null;
+    private static volatile Method getPlayerPrefix = null;
 
     /**
      * @param uuid the player's UUID, or null
@@ -65,6 +73,7 @@ public class FloodgateBridge {
             }
 
             isFloodgatePlayer = apiClass.getMethod("isFloodgatePlayer", UUID.class);
+            getPlayerPrefix = apiClass.getMethod("getPlayerPrefix");
             apiInstance = instance;
             resolved = true;
         } catch (Throwable exception) {
@@ -72,11 +81,65 @@ public class FloodgateBridge {
             GetOffMyLawn.LOGGER.info("Floodgate is present but its API couldn't be reached, falling back to UUID detection: {}", exception.toString());
             apiInstance = null;
             isFloodgatePlayer = null;
+            getPlayerPrefix = null;
             resolved = true;
         }
     }
 
     private static boolean hasFloodgateUuidLayout(UUID uuid) {
         return uuid.getMostSignificantBits() == 0 && uuid.getLeastSignificantBits() != 0;
+    }
+
+    /**
+     * @return the prefix Floodgate puts in front of Bedrock usernames, or an empty string when
+     *         Floodgate isn't installed and no Bedrock players can be present
+     */
+    public static String getPlayerPrefix() {
+        if (!IS_LOADED) {
+            return "";
+        }
+
+        resolveApi();
+
+        if (apiInstance != null && getPlayerPrefix != null) {
+            try {
+                String prefix = (String) getPlayerPrefix.invoke(apiInstance);
+
+                if (prefix != null) {
+                    return prefix;
+                }
+            } catch (Throwable exception) {
+                // Fall through to the default below
+            }
+        }
+
+        return DEFAULT_PREFIX;
+    }
+
+    /**
+     * Looks a player up by name, retrying with the Floodgate prefix if the plain name misses.
+     *
+     * <p>Bedrock players are stored under a prefixed name, so a Java player trying to trust one
+     * has to know to type {@code .Name} rather than the {@code Name} they see in chat.
+     *
+     * @param server the server whose name cache is searched
+     * @param name the name as typed by the player
+     * @return the matching profile, or empty if neither form matched
+     */
+    public static Optional<NameAndId> resolveName(MinecraftServer server, String name) {
+        var cache = server.services().nameToIdCache();
+        var profile = cache.get(name);
+
+        if (profile.isPresent()) {
+            return profile;
+        }
+
+        String prefix = getPlayerPrefix();
+
+        if (!prefix.isEmpty() && !name.startsWith(prefix)) {
+            return cache.get(prefix + name);
+        }
+
+        return profile;
     }
 }

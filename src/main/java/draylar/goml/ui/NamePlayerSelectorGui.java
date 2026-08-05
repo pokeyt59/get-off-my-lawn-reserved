@@ -1,6 +1,7 @@
 package draylar.goml.ui;
 
 import com.mojang.authlib.GameProfile;
+import draylar.goml.other.FloodgateBridge;
 import draylar.goml.registry.GOMLTextures;
 import eu.pb4.sgui.api.SguiUtils;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
@@ -17,6 +18,8 @@ import net.minecraft.world.item.Items;
 import static draylar.goml.ui.PagedGui.playClickSound;
 
 public class NamePlayerSelectorGui extends AnvilInputGui {
+    private static final int MAX_NAME_LENGTH = 16;
+
     private final Runnable regularClose;
     private final Consumer<NameAndId> playerConsumer;
     private final Predicate<NameAndId> shouldDisplay;
@@ -56,7 +59,7 @@ public class NamePlayerSelectorGui extends AnvilInputGui {
 
         if (this.timer-- == 0 && this.currentName != null) {
             this.updateIcon();
-            CompletableFuture.supplyAsync(() -> this.player.level().getServer().services().nameToIdCache().get(this.currentName)).thenAccept((profile) -> {
+            CompletableFuture.supplyAsync(() -> FloodgateBridge.resolveName(this.player.level().getServer(), this.currentName)).thenAccept((profile) -> {
                 this.player.level().getServer().execute(() -> {
                     if (profile.isPresent()) {
                         this.selectedPlayer = profile.get();
@@ -82,7 +85,8 @@ public class NamePlayerSelectorGui extends AnvilInputGui {
             return;
         }
         this.selectedPlayer = null;
-        if (input.length() < 3 || input.length() > 16) {
+        // Bedrock names are stored with a prefix, so they can run past the vanilla name length.
+        if (input.length() < 3 || input.length() > MAX_NAME_LENGTH + FloodgateBridge.getPlayerPrefix().length()) {
             this.updateIconInvalid();
         } else {
             this.timer = 20;
