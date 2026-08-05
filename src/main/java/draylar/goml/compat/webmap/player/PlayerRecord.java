@@ -57,10 +57,15 @@ public class PlayerRecord {
         this.uuid = uuid;
         this.resolvePlayer();
 
-        // If name is still null after player resolution, assume it failed and use defaults
+        // Resolution can fail for the icon while still finding a name, so both fall back
+        // independently. Offline-mode and Floodgate UUIDs are unknown to the session server
+        // but are present in the local user cache, which yields a name and no icon.
+        if (this.playerIcon == null) {
+            this.playerIcon = new PlayerHeadIcon(null);
+        }
+
         if (this.name == null) {
             this.name = name;
-            this.playerIcon = new PlayerHeadIcon(null);
         }
 
         if (this.name == null) {
@@ -86,9 +91,13 @@ public class PlayerRecord {
         return this.name;
     }
     /**
-     * @return {@link PlayerHeadIcon} containing the player's head. Only updated when calling {@link #resolvePlayer()}.
+     * @return {@link PlayerHeadIcon} containing the player's head, never null. Only updated when calling {@link #resolvePlayer()}.
      */
     public PlayerHeadIcon getHeadIcon() {
+        if (this.playerIcon == null) {
+            this.playerIcon = new PlayerHeadIcon(null);
+        }
+
         return this.playerIcon;
     }
     
