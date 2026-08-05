@@ -144,6 +144,7 @@ public class ClaimCommand {
 
                                                 if (player.length == 0) {
                                                     context.getSource().sendSuccess(() -> Component.translatable("argument.player.unknown").withStyle(ChatFormatting.RED), false);
+                                                    return 0;
                                                 }
 
                                                 return openList(context, player[0]);
