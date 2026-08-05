@@ -7,6 +7,7 @@ import draylar.goml.api.Claim;
 import draylar.goml.api.ClaimUtils;
 import draylar.goml.api.DataKey;
 import draylar.goml.block.ClaimAugmentBlock;
+import draylar.goml.other.FloodgateBridge;
 import draylar.goml.registry.GOMLTextures;
 import draylar.goml.ui.GenericPlayerListGui;
 import draylar.goml.ui.GenericPlayerSelectionGui;
@@ -24,6 +25,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -41,6 +44,10 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 public class ForceFieldAugmentBlock extends ClaimAugmentBlock {
+
+    // Bedrock can't render the barrier block marker, so the wall shows as red dust there instead.
+    private static final int FORCE_FIELD_DUST_COLOR = 0xD00000;
+    private static final float FORCE_FIELD_DUST_SCALE = 1.0F;
 
     public static final DataKey<Set<UUID>> UUID_KEY = DataKey.ofUuidSet(GetOffMyLawn.id("force_field/uuids"));
     public static final DataKey<Boolean> WHITELIST_KEY = DataKey.ofBoolean(GetOffMyLawn.id("force_field/whitelist"), true);
@@ -73,10 +80,14 @@ public class ForceFieldAugmentBlock extends ClaimAugmentBlock {
 
             var dir2 = pairPart.getSecond();
 
+            ParticleOptions particle = FloodgateBridge.isBedrockPlayer(player.getUUID())
+                    ? new DustParticleOptions(FORCE_FIELD_DUST_COLOR, FORCE_FIELD_DUST_SCALE)
+                    : new BlockParticleOption(ParticleTypes.BLOCK_MARKER, Blocks.BARRIER.defaultBlockState());
+
             for (int x = -1; x <= 1; x++) {
                 for (int y = -1; y <= 1; y++) {
                     ((ServerLevel) player.level()).sendParticles(
-                            (ServerPlayer) player, new BlockParticleOption(ParticleTypes.BLOCK_MARKER, Blocks.BARRIER.defaultBlockState()), true, true,
+                            (ServerPlayer) player, particle, true, true,
                             pos2.x + dir2.getStepZ() * x, player.getEyeY() + y, pos2.z + dir2.getStepX() * x,
                             1,
                             0.0, 0.0, 0.0,

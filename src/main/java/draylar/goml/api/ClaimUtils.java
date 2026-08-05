@@ -10,6 +10,7 @@ import draylar.goml.api.event.ClaimEvents;
 import draylar.goml.block.augment.ExplosionControllerAugmentBlock;
 import draylar.goml.block.entity.ClaimAnchorBlockEntity;
 import draylar.goml.other.FabricPermissionBridge;
+import draylar.goml.other.FloodgateBridge;
 import draylar.goml.other.GomlPlayer;
 import draylar.goml.other.OriginOwner;
 import draylar.goml.other.StatusEnum;
@@ -19,6 +20,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -516,6 +519,9 @@ public class ClaimUtils {
         return hash & 0xF;
     }
 
+    // Roughly matches the footprint of a block marker particle on Bedrock.
+    private static final float GOGGLES_DUST_SCALE = 1.0F;
+
     // From https://lospec.com/palette-list/minecraft-concrete (matches block order so matches goggles).
     private static final int[] CLAIM_COLORS_RGB = new int[]{0xcfd5d6, 0xe06101, 0xa9309f, 0x2489c7, 0xf1af15, 0x5ea918, 0xd5658f, 0x373a3e, 0x7d7d73, 0x157788, 0x64209c, 0x2d2f8f, 0x603c20, 0x495b24, 0x8e2121, 0x080a0f};
 
@@ -533,15 +539,24 @@ public class ClaimUtils {
         return CLAIM_COLORS_BLOCKS[claimColorIndex(claim)];
     }
 
+    /**
+     * Bedrock has no equivalent of {@code minecraft:block_marker}, so Geyser drops it entirely and
+     * claim outlines never reach the client. Coloured dust translates cleanly and carries the same
+     * per-claim colour, so it stands in there while Java keeps the nicer marker particle.
+     */
+    public static ParticleOptions gogglesClaimParticle(ServerPlayer player, Claim claim) {
+        if (FloodgateBridge.isBedrockPlayer(player.getUUID())) {
+            return new DustParticleOptions(webMapClaimColor(claim), GOGGLES_DUST_SCALE);
+        }
+
+        return new BlockParticleOption(ParticleTypes.BLOCK_MARKER, gogglesClaimColor(claim));
+    }
+
     public static void drawClaimInWorld(ServerPlayer player, Claim claim) {
         var box = claim.getClaimBox().toBox();
         var minPos = new BlockPos(box.x1(), Math.max(box.y1(), player.level().getMinY()), box.z1());
         var maxPos = new BlockPos(box.x2() - 1, Math.min(box.y2() - 1, player.level().getMaxY()), box.z2() - 1);
 
-        BlockState state = ClaimUtils.gogglesClaimColor(claim);
-
-        WorldParticleUtils.render(player, minPos, maxPos,
-                new BlockParticleOption(ParticleTypes.BLOCK_MARKER, state)
-        );
+        WorldParticleUtils.render(player, minPos, maxPos, gogglesClaimParticle(player, claim));
     }
 }
