@@ -4,46 +4,97 @@
 # against bad commits.
 
 name: build
-on: [pull_request, push, workflow_dispatch]
+on:
+  pull_request:
+  push:
+  # "Run workflow" in the Actions tab: builds the chosen branch and, with a version filled in, publishes it as a release
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Version to release, e.g. 1.21.1 (creates tag v1.21.1). Leave empty for a plain build.'
+        required: false
+        default: ''
 
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+# needed to publish the alpha pre-release and tagged releases
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # queued instead of cancelled, so a publish is never interrupted halfway
+    concurrency:
+      group: publish-${{ github.ref }}
     steps:
       - name: checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full history, the build number counts commits
       - name: setup jdk
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
+      # also validates the gradle wrapper
       - name: setup gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
+      # releases and tags build as their own version (v1.21.1 -> 1.21.1), everything else gets the patch number set to the
+      # count of commits since mod_version last changed in gradle.properties (1.21.0 -> 1.21.1 -> 1.21.2 ...).
+      # build.gradle adds the "+<minecraft version>" part.
+      - name: compute version
+        id: version
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          base=$(grep -E '^mod_version[[:space:]]*=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          minecraft=$(grep -E '^minecraft_version[[:space:]]*=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          if [ -n "$RELEASE" ]; then
+            version="${RELEASE#v}"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            since=$(git log -G '^mod_version[[:space:]]*=' --format=%H -1 -- gradle.properties)
+            patch=$(git rev-list --count "$since"..HEAD)
+            version="${base%.*}.$patch"
+          fi
+          version="${version%%+*}"
+          if ! [[ "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::Invalid version '$version'"
+            exit 1
+          fi
+          echo "building version $version+$minecraft"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "full=$version+$minecraft" >> "$GITHUB_OUTPUT"
       - name: build
-        run: ./gradlew build --stacktrace
-      - name: capture build artifacts
+        env:
+          MOD_VERSION: ${{ steps.version.outputs.version }}
+        run: ./gradlew build --stacktrace -Pmod_version="$MOD_VERSION"
+      # uploaded as-is, so they download directly instead of inside a zip (artifacts are named after the files)
+      - name: upload mod jar
         uses: actions/upload-artifact@v7
         with:
-          # Upload the jar as-is, so it downloads directly instead of inside a zip (artifact is named after the file)
           archive: false
           path: |
             build/libs/*.jar
             !build/libs/*-sources.jar
             !build/libs/*-dev.jar
+      - name: upload sources jar
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: build/libs/*-sources.jar
       # Boots a dev server (which also audits all mixins), waits for it to finish loading, then stops it
       - name: server startup test
         timeout-minutes: 10
+        env:
+          MOD_VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p run
           echo "eula=true" > run/eula.txt
           mkfifo server-input
-          ./gradlew runServer --console=plain < server-input > server.log 2>&1 &
+          ./gradlew runServer --console=plain -Pmod_version="$MOD_VERSION" < server-input > server.log 2>&1 &
           server_pid=$!
           # Keep the server's stdin open, so it can be stopped with a console command
           exec 3> server-input
@@ -90,3 +141,41 @@ jobs:
             run/crash-reports/
             run/.mixin.out/
           if-no-files-found: ignore
+      # every pushed build that passes the startup test becomes the rolling "alpha" pre-release,
+      # so the latest build always has the same download page
+      - name: publish alpha
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FULL_VERSION: ${{ steps.version.outputs.full }}
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -e '-sources.jar$' -e '-dev.jar$')
+          gh release delete alpha --yes --cleanup-tag || true
+          gh release create alpha "$jar" --prerelease --target "$GITHUB_SHA" \
+            --title "alpha $FULL_VERSION (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" \
+            --notes "Automatic build of ${GITHUB_REF_NAME}@${GITHUB_SHA}. Unstable, use at your own risk."
+      # pushing a tag like v1.21.1 publishes a normal release
+      - name: publish release
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FULL_VERSION: ${{ steps.version.outputs.full }}
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -e '-sources.jar$' -e '-dev.jar$')
+          # pending notes in changelog-next are the release text, github's generated notes if it's empty
+          if [ -s changelog-next ]; then notes=(--notes-file changelog-next); else notes=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" "$jar" --verify-tag \
+            --title "Get Off My Lawn ReServed $FULL_VERSION" "${notes[@]}"
+      # the Actions tab release button: tags the built commit and publishes the release in one go
+      - name: publish release (manual)
+        if: github.event_name == 'workflow_dispatch' && inputs.release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          FULL_VERSION: ${{ steps.version.outputs.full }}
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -e '-sources.jar$' -e '-dev.jar$')
+          # pending notes in changelog-next are the release text, github's generated notes if it's empty
+          if [ -s changelog-next ]; then notes=(--notes-file changelog-next); else notes=(--generate-notes); fi
+          gh release create "v$VERSION" "$jar" --target "$GITHUB_SHA" \
+            --title "Get Off My Lawn ReServed $FULL_VERSION" "${notes[@]}"

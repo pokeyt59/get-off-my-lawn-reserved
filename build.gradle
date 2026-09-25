@@ -108,6 +108,11 @@ tasks.withType(JavaCompile) {
 	options.encoding = "UTF-8"
 }
 
+java {
+	// Builds a -sources.jar next to the mod jar
+	withSourcesJar()
+}
+
 jar {
 	from "LICENSE"
 
