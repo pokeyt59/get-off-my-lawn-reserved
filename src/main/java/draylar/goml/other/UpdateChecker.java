@@ -398,22 +398,38 @@ public final class UpdateChecker {
             throw new IOException("checksum of " + update.fileName + " doesn't match the release");
         }
 
-        try (var zip = new ZipFile(file.toFile())) {
+        var json = readFabricModJson(file);
+        if (json == null) {
+            throw new IOException(update.fileName + " isn't a Fabric mod");
+        }
+
+        var id = getString(json, "id", "");
+        var version = getString(json, "version", "");
+        if (!GetOffMyLawn.MOD_ID.equals(id) || !update.version.equals(version)) {
+            throw new IOException(update.fileName + " contains " + id + " " + version + " instead of " + GetOffMyLawn.MOD_ID + " " + update.version);
+        }
+    }
+
+    private static @Nullable JsonObject readFabricModJson(Path jar) throws IOException {
+        try (var zip = new ZipFile(jar.toFile())) {
             var entry = zip.getEntry("fabric.mod.json");
             if (entry == null) {
-                throw new IOException(update.fileName + " isn't a Fabric mod");
+                return null;
             }
 
-            JsonElement json;
             try (var reader = new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8)) {
-                json = JsonParser.parseReader(reader);
+                var json = JsonParser.parseReader(reader);
+                return json.isJsonObject() ? json.getAsJsonObject() : null;
             }
+        }
+    }
 
-            var id = json.isJsonObject() ? getString(json.getAsJsonObject(), "id", "") : "";
-            var version = json.isJsonObject() ? getString(json.getAsJsonObject(), "version", "") : "";
-            if (!GetOffMyLawn.MOD_ID.equals(id) || !update.version.equals(version)) {
-                throw new IOException(update.fileName + " contains " + id + " " + version + " instead of " + GetOffMyLawn.MOD_ID + " " + update.version);
-            }
+    private static boolean isGomlJar(Path file) {
+        try {
+            var json = readFabricModJson(file);
+            return json != null && GetOffMyLawn.MOD_ID.equals(getString(json, "id", ""));
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -461,15 +477,6 @@ public final class UpdateChecker {
         var backup = CURRENT_JAR.resolveSibling(CURRENT_JAR.getFileName() + BACKUP_SUFFIX);
         var target = CURRENT_JAR.resolveSibling(install.update.fileName);
         try {
-            // Only the latest backup is kept
-            try (var files = Files.newDirectoryStream(CURRENT_JAR.getParent(), "goml-*.jar" + BACKUP_SUFFIX)) {
-                for (var file : files) {
-                    if (!file.equals(backup)) {
-                        Files.deleteIfExists(file);
-                    }
-                }
-            }
-
             Files.move(CURRENT_JAR, backup, StandardCopyOption.REPLACE_EXISTING);
             try {
                 Files.move(install.file, target, StandardCopyOption.REPLACE_EXISTING);
@@ -478,11 +485,28 @@ public final class UpdateChecker {
                 throw e;
             }
 
+            deleteOlderBackups(backup);
+
             GetOffMyLawn.LOGGER.info("Installed Get Off My Lawn {} as {}, it will be used from the next start. The previous jar was kept as {}",
                     install.update.version, target.getFileName(), backup.getFileName());
         } catch (IOException e) {
             GetOffMyLawn.LOGGER.warn("Couldn't install Get Off My Lawn {}: {}. To update by hand, replace {} with {} (without the {} ending)",
                     install.update.version, e.toString(), CURRENT_JAR, install.file, DOWNLOAD_SUFFIX);
+        }
+    }
+
+    /**
+     * Keeps only one older version: removes other GOML backups, found by their content so renamed jars count too.
+     */
+    private static void deleteOlderBackups(Path keep) {
+        try (var files = Files.newDirectoryStream(keep.getParent(), "*.jar" + BACKUP_SUFFIX)) {
+            for (var file : files) {
+                if (!file.equals(keep) && isGomlJar(file)) {
+                    Files.deleteIfExists(file);
+                }
+            }
+        } catch (IOException e) {
+            GetOffMyLawn.LOGGER.warn("Couldn't remove older Get Off My Lawn backups: {}", e.toString());
         }
     }
 

@@ -102,7 +102,7 @@ You can find config file in `./config/getoffmylawn.json`. To reload it, just typ
   "checkForUpdates": true,              // Checks GitHub for a newer version and tells the console and admins (goml.update_notify permission, or level 3) about it. Nothing is downloaded.
   "updateChannel": "release",           // either "release" (normal releases) or "alpha" (the latest GitHub Actions build)
   "updateCheckIntervalHours": 12,       // How often to check again while the server runs, 0 to only check on startup
-  "autoUpdate": false                   // Dedicated servers only: download the new version (checked against GitHub's checksum) and install it when the server stops, so it's used from the next start. The previous jar is kept as <name>.jar.old in the mods folder. Needs checkForUpdates.
+  "autoUpdate": false                   // Dedicated servers only: download the new version (checked against GitHub's checksum) and install it when the server stops, so it's used from the next start. The previous jar is kept as <name>.jar.old in the mods folder, only the latest one. Needs checkForUpdates.
 }
 ```
 
