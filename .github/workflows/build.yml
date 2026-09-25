@@ -67,10 +67,13 @@ jobs:
           echo "building version $version+$minecraft"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "full=$version+$minecraft" >> "$GITHUB_OUTPUT"
+          # build time, the update checker compares it with when the alpha / release it finds was published
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - name: build
         env:
           MOD_VERSION: ${{ steps.version.outputs.version }}
-        run: ./gradlew build --stacktrace -Pmod_version="$MOD_VERSION"
+          BUILD_TIME: ${{ steps.version.outputs.time }}
+        run: ./gradlew build --stacktrace -Pmod_version="$MOD_VERSION" -Pbuild_commit="$GITHUB_SHA" -Pbuild_time="$BUILD_TIME"
       # uploaded as-is, so they download directly instead of inside a zip (artifacts are named after the files)
       - name: upload mod jar
         uses: actions/upload-artifact@v7
@@ -90,11 +93,12 @@ jobs:
         timeout-minutes: 10
         env:
           MOD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_TIME: ${{ steps.version.outputs.time }}
         run: |
           mkdir -p run
           echo "eula=true" > run/eula.txt
           mkfifo server-input
-          ./gradlew runServer --console=plain -Pmod_version="$MOD_VERSION" < server-input > server.log 2>&1 &
+          ./gradlew runServer --console=plain -Pmod_version="$MOD_VERSION" -Pbuild_commit="$GITHUB_SHA" -Pbuild_time="$BUILD_TIME" < server-input > server.log 2>&1 &
           server_pid=$!
           # Keep the server's stdin open, so it can be stopped with a console command
           exec 3> server-input
@@ -107,7 +111,14 @@ jobs:
 
           started=false
           grep -q 'Done (' server.log && started=true
+          # The update checker runs in the background after startup, give it time to report
+          update_pattern='Get Off My Lawn .* is (up to date|available)|Couldn.t check for Get Off My Lawn updates'
           if $started; then
+            for i in $(seq 1 45); do
+              grep -qE "$update_pattern" server.log && break
+              kill -0 "$server_pid" 2>/dev/null || break
+              sleep 1
+            done
             echo "stop" >&3
           else
             kill "$server_pid" 2>/dev/null || true
@@ -129,6 +140,7 @@ jobs:
             fail "Errors from GOML or its mixins during the test"
           fi
           grep -qE -- '- goml [0-9]' server.log || fail "GOML wasn't in the loaded mod list"
+          grep -E "$update_pattern" server.log || fail "The update checker didn't report anything"
           echo "Server started and stopped cleanly"
       - name: upload server logs
         if: failure()

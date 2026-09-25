@@ -16,6 +16,7 @@ import draylar.goml.other.CardboardWarning;
 import draylar.goml.other.ClaimCommand;
 import draylar.goml.config.GOMLConfig;
 import draylar.goml.other.PlaceholdersReg;
+import draylar.goml.other.UpdateChecker;
 import draylar.goml.other.VanillaTeamGroups;
 import draylar.goml.registry.GOMLBlocks;
 import draylar.goml.registry.GOMLEntities;
@@ -44,6 +45,8 @@ import java.util.function.Consumer;
 
 public class GetOffMyLawn implements ModInitializer, LevelComponentInitializer {
     public static final String MOD_ID = "goml";
+    public static final String REPOSITORY = "pokeyt59/get-off-my-lawn-reserved";
+    public static final String SOURCE_URL = "https://github.com/" + REPOSITORY;
     public static final ComponentKey<ClaimComponent> CLAIM = ComponentRegistryV3.INSTANCE.getOrCreate(id("claims"), ClaimComponent.class);
     public static final CreativeModeTab GROUP = CreativeModeTab.builder(null, -1)
             .title(Component.translatable("itemGroup.goml.group"))
@@ -101,6 +104,7 @@ public class GetOffMyLawn implements ModInitializer, LevelComponentInitializer {
 
         ServerLifecycleEvents.SERVER_STARTED.register(WebmapCompat::init);
         ServerLifecycleEvents.SERVER_STARTED.register(BedrockCompat::init);
+        UpdateChecker.init();
 
         ServerChunkEvents.CHUNK_LOAD.register((world, chunk, created) -> GetOffMyLawn.onChunkEvent(world, chunk, Claim::internal_incrementChunks));
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GetOffMyLawn.onChunkEvent(world, chunk, Claim::internal_decrementChunks));

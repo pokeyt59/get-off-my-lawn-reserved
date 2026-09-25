@@ -401,8 +401,8 @@ public class ClaimCommand {
         player.sendSystemMessage(Component.literal("-------------------------------------").withStyle(ChatFormatting.DARK_GRAY), false);
         player.sendSystemMessage(Component.literal("GitHub: ")
                 .append(
-                        Component.literal("https://github.com/Patbox/get-off-my-lawn-reserved")
-                                .setStyle(Style.EMPTY.withColor(ChatFormatting.BLUE).withUnderlined(true).withClickEvent(new ClickEvent.OpenUrl(URI.create("https://github.com/Patbox/get-off-my-lawn-reserved"))))
+                        Component.literal(GetOffMyLawn.SOURCE_URL)
+                                .setStyle(Style.EMPTY.withColor(ChatFormatting.BLUE).withUnderlined(true).withClickEvent(new ClickEvent.OpenUrl(URI.create(GetOffMyLawn.SOURCE_URL))))
                 ), false);
 
         return 1;
@@ -492,6 +492,7 @@ public class ClaimCommand {
 
     private static int reload(CommandContext<CommandSourceStack> context) {
         GetOffMyLawn.CONFIG = GOMLConfig.loadOrCreateConfig();
+        UpdateChecker.start(context.getSource().getServer());
         context.getSource().sendSuccess(() -> prefix(Component.literal("Reloaded config")), false);
         return 1;
     }

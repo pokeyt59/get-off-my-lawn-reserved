@@ -98,7 +98,10 @@ You can find config file in `./config/getoffmylawn.json`. To reload it, just typ
   "placeholderNoClaimTrusted": "<gray><italic>Nobody",
   "placeholderClaimCanBuildInfo": "${owners} <gray>(<green>${anchor}</green>)",
   "placeholderClaimCantBuildInfo": "${owners} <gray>(<red>${anchor}</red>)",
-  "claimColorSource": "location"        // either "location" or "player" - "location" will chose the color based on the location of the claim (hash of coordinates), "player" will chose the color based on the owner of the claim (hash of UUID).
+  "claimColorSource": "location",       // either "location" or "player" - "location" will chose the color based on the location of the claim (hash of coordinates), "player" will chose the color based on the owner of the claim (hash of UUID).
+  "checkForUpdates": true,              // Checks GitHub for a newer version and tells the console and admins (goml.update_notify permission, or level 3) about it. Nothing is downloaded.
+  "updateChannel": "release",           // either "release" (normal releases) or "alpha" (the latest GitHub Actions build)
+  "updateCheckIntervalHours": 12        // How often to check again while the server runs, 0 to only check on startup
 }
 ```
 

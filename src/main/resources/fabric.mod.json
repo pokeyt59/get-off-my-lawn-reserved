@@ -9,8 +9,9 @@
     "Draylar (Original author)"
   ],
   "contact": {
-    "homepage": "https://pb4.eu",
-    "sources": "https://github.com/Patbox/get-off-my-lawn-reserved"
+    "homepage": "https://github.com/pokeyt59/get-off-my-lawn-reserved",
+    "sources": "https://github.com/pokeyt59/get-off-my-lawn-reserved",
+    "issues": "https://github.com/pokeyt59/get-off-my-lawn-reserved/issues"
   },
   "license": "MIT",
   "icon": "assets/goml/icon.png",
@@ -40,6 +41,10 @@
     ],
     "polydex:entry/goml": {
       "icon": "goml:withered_claim_anchor"
+    },
+    "goml:build": {
+      "commit": "${build_commit}",
+      "time": "${build_time}"
     }
   }
 }

@@ -93,11 +93,17 @@ dependencies {
 	compileOnly "de.bluecolored:bluemap-api:${bluemap_version}"
 }
 
+// Set by the GitHub Actions build, the update checker uses them to tell builds apart
+def buildCommit = project.findProperty("build_commit") ?: ""
+def buildTime = project.findProperty("build_time") ?: ""
+
 processResources {
 	inputs.property "version", project.version
+	inputs.property "build_commit", buildCommit
+	inputs.property "build_time", buildTime
 
 	filesMatching('fabric.mod.json') {
-		expand "version": project.version
+		expand "version": project.version, "build_commit": buildCommit, "build_time": buildTime
 	}
 }
 

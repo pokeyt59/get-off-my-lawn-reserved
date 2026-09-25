@@ -166,5 +166,7 @@
   "text.goml.webmap.label.unknown": "Unknown",
   "text.goml.webmap.label.owners": "Owner(s):",
   "text.goml.webmap.label.trusted": "Trusted:",
-  "text.goml.webmap.label.augments": "Augments:"
+  "text.goml.webmap.label.augments": "Augments:",
+  "text.goml.update.available": "Get Off My Lawn %s is available on the %s channel (this server runs %s)",
+  "text.goml.update.download": "[Download]"
 }
