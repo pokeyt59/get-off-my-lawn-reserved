@@ -184,16 +184,15 @@ public class EventHandlers {
             return InteractionResult.PASS;
         }
 
-        if (!claims.isEmpty()) {
-            boolean noPermission = claims.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !boxInfo.getValue().hasPermission(player));
+        // No need to check for no claims first, anyMatch is false for them anyway
+        boolean noPermission = claims.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !boxInfo.getValue().hasPermission(player));
 
-            if (noPermission && !ClaimUtils.isInAdminMode(player)) {
-                InteractionResult check = ClaimEvents.PERMISSION_DENIED.invoker().check(player, player.level(), hand, pos, reason);
+        if (noPermission && !ClaimUtils.isInAdminMode(player)) {
+            InteractionResult check = ClaimEvents.PERMISSION_DENIED.invoker().check(player, player.level(), hand, pos, reason);
 
-                if (check.consumesAction() || check.equals(InteractionResult.PASS)) {
-                    player.sendOverlayMessage(reason.getReason());
-                    return InteractionResult.FAIL;
-                }
+            if (check.consumesAction() || check.equals(InteractionResult.PASS)) {
+                player.sendOverlayMessage(reason.getReason());
+                return InteractionResult.FAIL;
             }
         }
 

@@ -12,10 +12,16 @@ import net.minecraft.world.phys.Vec3;
 // Original implementation https://github.com/NucleoidMC/plasmid/blob/1.16/src/main/java/xyz/nucleoid/plasmid/map/workspace/editor/ParticleOutlineRenderer.java
 public class WorldParticleUtils {
     public static void render(ServerPlayer player, BlockPos min, BlockPos max, ParticleOptions effect) {
+        render(player, min, max, effect, 40);
+    }
+
+    /**
+     * @param maxCount soft limit of particles per edge, it can be exceeded on long edges to keep them at most 5 blocks apart
+     */
+    public static void render(ServerPlayer player, BlockPos min, BlockPos max, ParticleOptions effect, int maxCount) {
         Edge[] edges = edges(min, max);
 
         int maxInterval = 5;
-        int maxCount = 40;
 
         for (Edge edge : edges) {
             int length = edge.length();

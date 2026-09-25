@@ -1,13 +1,16 @@
 package draylar.goml;
 
+import com.jamieswhiteshirt.rtree3i.Box;
 import eu.pb4.polymer.core.api.item.PolymerCreativeModeTabUtils;
 import org.ladysnake.cca.api.v3.component.ComponentKey;
 import org.ladysnake.cca.api.v3.component.ComponentRegistryV3;
 import draylar.goml.api.Claim;
+import draylar.goml.api.ClaimUtils;
 import draylar.goml.api.GomlProtectionProvider;
 import draylar.goml.cca.ClaimComponent;
 import draylar.goml.cca.WorldClaimComponent;
 import draylar.goml.compat.ArgonautsCompat;
+import draylar.goml.compat.BedrockCompat;
 import draylar.goml.compat.webmap.WebmapCompat;
 import draylar.goml.other.CardboardWarning;
 import draylar.goml.other.ClaimCommand;
@@ -23,7 +26,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
@@ -63,7 +65,9 @@ public class GetOffMyLawn implements ModInitializer, LevelComponentInitializer {
 
     @Override
     public void onInitialize() {
-        MixinEnvironment.getCurrentEnvironment().audit();
+        if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
+            MixinEnvironment.getCurrentEnvironment().audit();
+        }
         CardboardWarning.checkAndAnnounce();
         GOMLBlocks.init();
         GOMLItems.init();
@@ -96,6 +100,7 @@ public class GetOffMyLawn implements ModInitializer, LevelComponentInitializer {
         }
 
         ServerLifecycleEvents.SERVER_STARTED.register(WebmapCompat::init);
+        ServerLifecycleEvents.SERVER_STARTED.register(BedrockCompat::init);
 
         ServerChunkEvents.CHUNK_LOAD.register((world, chunk, created) -> GetOffMyLawn.onChunkEvent(world, chunk, Claim::internal_incrementChunks));
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GetOffMyLawn.onChunkEvent(world, chunk, Claim::internal_decrementChunks));
@@ -107,14 +112,12 @@ public class GetOffMyLawn implements ModInitializer, LevelComponentInitializer {
     }
 
     private static void onChunkEvent(ServerLevel world, LevelChunk chunk, Consumer<Claim> chunkHandler) {
-        CLAIM.get(world).getClaims().entries().filter(x -> {
-            var minX = SectionPos.blockToSectionCoord(x.getKey().toBox().x1());
-            var minZ = SectionPos.blockToSectionCoord(x.getKey().toBox().z1());
+        // Matches claims where (x1 >> 4) <= chunkX <= (x2 >> 4) (same for z), like Claim#internal_updateChunkCount,
+        // but lets the R-tree skip claims far away from the chunk.
+        var minX = chunk.getPos().x() << 4;
+        var minZ = chunk.getPos().z() << 4;
+        var chunkBox = Box.create(minX, Integer.MIN_VALUE, minZ, minX + 15, Integer.MAX_VALUE, minZ + 15);
 
-            var maxX = SectionPos.blockToSectionCoord(x.getKey().toBox().x2());
-            var maxZ = SectionPos.blockToSectionCoord(x.getKey().toBox().z2());
-
-            return (minX <= chunk.getPos().x() && maxX >= chunk.getPos().x() && minZ <= chunk.getPos().z() && maxZ >= chunk.getPos().z());
-        }).forEach(x -> chunkHandler.accept(x.getValue()));
+        ClaimUtils.getClaimsInOpenBox(world, chunkBox).forEach(x -> chunkHandler.accept(x.getValue()));
     }
 }

@@ -111,12 +111,16 @@ public class Claim {
     }
 
     public boolean hasPermission(UUID uuid) {
+        // Direct check first, as group lookups can be much more expensive
+        if (hasDirectPermission(uuid)) {
+            return true;
+        }
         for (var group : this.getGroups()) {
             if (group.isPartOf(uuid)) {
                 return true;
             }
         }
-        return hasDirectPermission(uuid);
+        return false;
     }
 
     public boolean hasDirectPermission(UUID uuid) {
@@ -455,6 +459,8 @@ public class Claim {
 
     @ApiStatus.Internal
     public void internal_updateChunkCount(ServerLevel world) {
+        // Recount from scratch, as resized/upgraded claims call this again
+        this.chunksLoadedCount = 0;
         var minX = SectionPos.blockToSectionCoord(this.claimBox.toBox().x1());
         var minZ = SectionPos.blockToSectionCoord(this.claimBox.toBox().z1());
 
@@ -546,6 +552,13 @@ public class Claim {
     }
 
     public void tick(ServerLevel world) {
+        // Players in claim are only tracked for augments, so there is no need to look them up without any.
+        // Players already inside will get onPlayerEnter called on next tick after an augment is added.
+        if (this.augments.isEmpty()) {
+            this.previousTickPlayers.clear();
+            return;
+        }
+
         if (this.chunksLoadedCount > 0) {
             var box = this.claimBox.minecraftBox();
             var playersInClaim = world.getPlayers(x -> x.getBoundingBox().intersects(box));

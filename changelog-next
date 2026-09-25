@@ -1,0 +1,5 @@
+- Improved performance of chunk loading/unloading, claim ticking, explosions and protection checks.
+- Fixed fluids being able to flow into a claim from a different claim next to it.
+- Fixed resized/upgraded claims counting loaded chunks twice, which kept their augments ticking after chunks unloaded.
+- Bedrock players (Geyser/Floodgate) now see claim outlines and force field particles, as colored dust.
+- Mixin audit now only runs in development environment, speeding up server startup.

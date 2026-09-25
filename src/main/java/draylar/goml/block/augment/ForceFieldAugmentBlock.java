@@ -7,6 +7,7 @@ import draylar.goml.api.Claim;
 import draylar.goml.api.ClaimUtils;
 import draylar.goml.api.DataKey;
 import draylar.goml.block.ClaimAugmentBlock;
+import draylar.goml.compat.BedrockCompat;
 import draylar.goml.registry.GOMLTextures;
 import draylar.goml.ui.GenericPlayerListGui;
 import draylar.goml.ui.GenericPlayerSelectionGui;
@@ -24,6 +25,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -73,10 +76,16 @@ public class ForceFieldAugmentBlock extends ClaimAugmentBlock {
 
             var dir2 = pairPart.getSecond();
 
+            // Geyser can't translate block markers, so Bedrock players get red dust instead.
+            // Alpha is set, as Geyser passes the color as ARGB to Bedrock clients.
+            ParticleOptions particle = BedrockCompat.isBedrock((ServerPlayer) player)
+                    ? new DustParticleOptions(0xFFFF0000, 1)
+                    : new BlockParticleOption(ParticleTypes.BLOCK_MARKER, Blocks.BARRIER.defaultBlockState());
+
             for (int x = -1; x <= 1; x++) {
                 for (int y = -1; y <= 1; y++) {
                     ((ServerLevel) player.level()).sendParticles(
-                            (ServerPlayer) player, new BlockParticleOption(ParticleTypes.BLOCK_MARKER, Blocks.BARRIER.defaultBlockState()), true, true,
+                            (ServerPlayer) player, particle, true, true,
                             pos2.x + dir2.getStepZ() * x, player.getEyeY() + y, pos2.z + dir2.getStepX() * x,
                             1,
                             0.0, 0.0, 0.0,

@@ -9,6 +9,7 @@ import draylar.goml.GetOffMyLawn;
 import draylar.goml.api.event.ClaimEvents;
 import draylar.goml.block.augment.ExplosionControllerAugmentBlock;
 import draylar.goml.block.entity.ClaimAnchorBlockEntity;
+import draylar.goml.compat.BedrockCompat;
 import draylar.goml.other.FabricPermissionBridge;
 import draylar.goml.other.GomlPlayer;
 import draylar.goml.other.OriginOwner;
@@ -19,6 +20,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -44,6 +46,7 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.apache.commons.lang3.mutable.MutableBoolean;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -52,6 +55,7 @@ import java.util.stream.Collectors;
 import static draylar.goml.GetOffMyLawn.id;
 
 public class ClaimUtils {
+    private static final int BEDROCK_OUTLINE_PARTICLES_PER_EDGE = 16;
 
     /**
      * Returns all claims at the given position in the given world.
@@ -186,7 +190,8 @@ public class ClaimUtils {
     }
 
     public static boolean isInAdminMode(Player player) {
-        return FabricPermissionBridge.checkPermission(player, id("modify_others"), PermissionLevel.ADMINS) && (player instanceof GomlPlayer adminModePlayer && adminModePlayer.goml_getAdminMode());
+        // Admin mode flag is checked first, as it's much cheaper than a permission check
+        return player instanceof GomlPlayer adminModePlayer && adminModePlayer.goml_getAdminMode() && FabricPermissionBridge.checkPermission(player, id("modify_others"), PermissionLevel.ADMINS);
     }
 
     public static boolean canFireDestroy(Level world, BlockPos pos) {
@@ -195,36 +200,62 @@ public class ClaimUtils {
 
     public static boolean canFluidFlow(Level world, BlockPos cur, BlockPos dest) {
         var claimsDest = ClaimUtils.getClaimsAt(world, dest);
-        var claimsCur = ClaimUtils.getClaimsAt(world, cur);
-        return claimsDest.isEmpty() || claimsCur.anyMatch(x -> claimsCur.anyMatch(y -> x.equals(y)));
+        if (claimsDest.isEmpty()) {
+            return true;
+        }
+
+        // Fluids can only flow into a claim from inside of the same claim
+        return ClaimUtils.getClaimsAt(world, cur).anyMatch(x -> claimsDest.anyMatch(y -> x.getValue() == y.getValue()));
     }
 
     public static boolean canExplosionDestroy(Level world, BlockPos pos, @Nullable Entity causingEntity) {
-        Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, pos);
+        return canExplosionDestroy(world, pos, getExplosionPlayer(causingEntity), ClaimUtils.getClaimsAt(world, pos).collect(Collectors.toList()));
+    }
 
-        Player player;
-
+    /**
+     * Returns the player responsible for an explosion caused by given entity, used for permission checks.
+     */
+    @ApiStatus.Internal
+    @Nullable
+    public static Player getExplosionPlayer(@Nullable Entity causingEntity) {
         if (causingEntity instanceof Player playerEntity) {
-            player = playerEntity;
+            return playerEntity;
         } else if (!GetOffMyLawn.CONFIG.protectAgainstHostileExplosionsActivatedByTrustedPlayers && causingEntity instanceof Mob creeperEntity && creeperEntity.getTarget() instanceof Player playerEntity) {
-            player = playerEntity;
-        } else {
-            player = null;
+            return playerEntity;
         }
 
-        if (player != null && claimsFound.isNotEmpty()) {
-            return !claimsFound.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !canModifyClaimAt(world, pos, boxInfo, player));
+        return null;
+    }
+
+    /**
+     * Same as {@link #canExplosionDestroy(Level, BlockPos, Entity)}, but with already resolved player and claims at given position.
+     * Allows checking many positions of a single explosion without querying claims for each one.
+     */
+    @ApiStatus.Internal
+    public static boolean canExplosionDestroy(Level world, BlockPos pos, @Nullable Player player, List<Entry<ClaimBox, Claim>> claimsFound) {
+        if (claimsFound.isEmpty()) {
+            return true;
         }
 
-        return claimsFound.isEmpty() || claimsFound.anyMatch((c) -> {
-            if (world.getServer() != null) {
-                if (c.getValue().hasAugment(GOMLBlocks.EXPLOSION_CONTROLLER.getFirst())) {
-                    return c.getValue().getData(ExplosionControllerAugmentBlock.KEY) == StatusEnum.Toggle.DISABLED;
+        if (player != null) {
+            for (var boxInfo : claimsFound) {
+                if (!canModifyClaimAt(world, pos, boxInfo, player)) {
+                    return false;
                 }
             }
+            return true;
+        }
 
-            return false;
-        });
+        if (world.getServer() != null) {
+            for (var c : claimsFound) {
+                if (c.getValue().hasAugment(GOMLBlocks.EXPLOSION_CONTROLLER.getFirst())
+                        && c.getValue().getData(ExplosionControllerAugmentBlock.KEY) == StatusEnum.Toggle.DISABLED) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public static boolean canDamageEntity(Level world, Entity entity, DamageSource source) {
@@ -308,7 +339,8 @@ public class ClaimUtils {
         }
 
         Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, pos);
-        if (player != null && claimsFound.isNotEmpty()) {
+        if (player != null) {
+            // Also true when there are no claims, without walking the tree twice
             return !claimsFound.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !canModifyClaimAt(world, pos, boxInfo, player));
         }
 
@@ -473,21 +505,22 @@ public class ClaimUtils {
         if (claims.isEmpty()) {
             return true;
         }
-        var originClaims = ClaimUtils.getClaimsAt(world, origin);
-
-        if (originClaims.isEmpty() && uuid == null) {
-            return false;
-        }
 
         var trusted = new HashSet<UUID>();
         if (uuid != null) {
             trusted.add(uuid);
         }
 
-        originClaims.forEach(x -> {
+        var hasOriginClaims = new MutableBoolean(false);
+        ClaimUtils.getClaimsAt(world, origin).forEach(x -> {
+            hasOriginClaims.setTrue();
             trusted.addAll(x.getValue().getOwners());
             trusted.addAll(x.getValue().getTrusted());
         });
+
+        if (hasOriginClaims.isFalse() && uuid == null) {
+            return false;
+        }
 
         return claims.anyMatch(x -> x.getValue().hasPermission(trusted));
 
@@ -537,6 +570,16 @@ public class ClaimUtils {
         var box = claim.getClaimBox().toBox();
         var minPos = new BlockPos(box.x1(), Math.max(box.y1(), player.level().getMinY()), box.z1());
         var maxPos = new BlockPos(box.x2() - 1, Math.min(box.y2() - 1, player.level().getMaxY()), box.z2() - 1);
+
+        if (BedrockCompat.isBedrock(player)) {
+            // Geyser can't translate block markers, so use dust in matching color, with fewer particles per edge.
+            // Alpha is set, as Geyser passes the color as ARGB to Bedrock clients.
+            WorldParticleUtils.render(player, minPos, maxPos,
+                    new DustParticleOptions(0xFF000000 | ClaimUtils.webMapClaimColor(claim), 1),
+                    BEDROCK_OUTLINE_PARTICLES_PER_EDGE
+            );
+            return;
+        }
 
         BlockState state = ClaimUtils.gogglesClaimColor(claim);
 
