@@ -32,3 +32,57 @@ jobs:
         with:
           name: goml-jar
           path: build/libs/*.jar
+      # Boots a dev server (which also audits all mixins), waits for it to finish loading, then stops it
+      - name: server startup test
+        timeout-minutes: 10
+        run: |
+          mkdir -p run
+          echo "eula=true" > run/eula.txt
+          mkfifo server-input
+          ./gradlew runServer --console=plain < server-input > server.log 2>&1 &
+          server_pid=$!
+          # Keep the server's stdin open, so it can be stopped with a console command
+          exec 3> server-input
+
+          for i in $(seq 1 540); do
+            grep -q 'Done (' server.log && break
+            kill -0 "$server_pid" 2>/dev/null || break
+            sleep 1
+          done
+
+          started=false
+          grep -q 'Done (' server.log && started=true
+          if $started; then
+            echo "stop" >&3
+          else
+            kill "$server_pid" 2>/dev/null || true
+          fi
+          exec 3>&-
+
+          status=0
+          wait "$server_pid" || status=$?
+
+          fail() {
+            echo "::error::$1"
+            tail -n 200 server.log
+            exit 1
+          }
+
+          $started || fail "Server didn't finish starting"
+          [ "$status" -eq 0 ] || fail "Server exited with status $status"
+          if grep -nE 'Mixin apply.*failed|InvalidInjectionException|MixinApplyError|MixinTransformerError|^\s*at .*(draylar\.goml|goml\$)' server.log; then
+            fail "Errors from GOML or its mixins during the test"
+          fi
+          grep -qE -- '- goml [0-9]' server.log || fail "GOML wasn't in the loaded mod list"
+          echo "Server started and stopped cleanly"
+      - name: upload server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs
+          path: |
+            server.log
+            run/logs/
+            run/crash-reports/
+            run/.mixin.out/
+          if-no-files-found: ignore
