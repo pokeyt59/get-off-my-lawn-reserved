@@ -28,10 +28,14 @@ jobs:
       - name: build
         run: ./gradlew build --stacktrace
       - name: capture build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: goml-jar
-          path: build/libs/*.jar
+          # Upload the jar as-is, so it downloads directly instead of inside a zip (artifact is named after the file)
+          archive: false
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
+            !build/libs/*-dev.jar
       # Boots a dev server (which also audits all mixins), waits for it to finish loading, then stops it
       - name: server startup test
         timeout-minutes: 10
@@ -77,7 +81,7 @@ jobs:
           echo "Server started and stopped cleanly"
       - name: upload server logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-logs
           path: |
