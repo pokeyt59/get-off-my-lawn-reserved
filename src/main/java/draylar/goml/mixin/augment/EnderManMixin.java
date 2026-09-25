@@ -1,5 +1,6 @@
 package draylar.goml.mixin.augment;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import draylar.goml.api.ClaimUtils;
 import draylar.goml.registry.GOMLBlocks;
 import net.minecraft.world.entity.EntityType;
@@ -39,14 +40,11 @@ public abstract class EnderManMixin extends Monster {
     public static abstract class EndermanLeaveBlockGoalMixin extends Goal {
         @Shadow @Final private EnderMan enderman;
 
-        @Inject(method = "canUse", at = @At("HEAD"), cancellable = true)
-        private void goml$cancelInClaim(CallbackInfoReturnable<Boolean> cir) {
-            boolean b = ClaimUtils.getClaimsAt(this.enderman.level(), this.enderman.blockPosition())
+        // Goals are checked every other tick for every enderman, so only look up claims when vanilla would start it
+        @ModifyReturnValue(method = "canUse", at = @At("RETURN"))
+        private boolean goml$cancelInClaim(boolean original) {
+            return original && !ClaimUtils.getClaimsAt(this.enderman.level(), this.enderman.blockPosition())
                     .anyMatch(claim -> claim.getValue().hasAugment(GOMLBlocks.ENDER_BINDING.getFirst()));
-
-            if (b) {
-                cir.setReturnValue(false);
-            }
         }
     }
 
@@ -54,14 +52,11 @@ public abstract class EnderManMixin extends Monster {
     public static abstract class EndermanTakeBlockGoalMixin extends Goal {
         @Shadow @Final private EnderMan enderman;
 
-        @Inject(method = "canUse", at = @At("HEAD"), cancellable = true)
-        private void goml$cancelInClaim(CallbackInfoReturnable<Boolean> cir) {
-            boolean b = ClaimUtils.getClaimsAt(this.enderman.level(), this.enderman.blockPosition())
+        // Goals are checked every other tick for every enderman, so only look up claims when vanilla would start it
+        @ModifyReturnValue(method = "canUse", at = @At("RETURN"))
+        private boolean goml$cancelInClaim(boolean original) {
+            return original && !ClaimUtils.getClaimsAt(this.enderman.level(), this.enderman.blockPosition())
                     .anyMatch(claim -> claim.getValue().hasAugment(GOMLBlocks.ENDER_BINDING.getFirst()));
-
-            if (b) {
-                cir.setReturnValue(false);
-            }
         }
     }
 }

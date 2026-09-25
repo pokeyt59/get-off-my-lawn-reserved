@@ -1,6 +1,9 @@
 package draylar.goml.cca;
 
+import com.jamieswhiteshirt.rtree3i.Configuration;
 import com.jamieswhiteshirt.rtree3i.ConfigurationBuilder;
+import com.jamieswhiteshirt.rtree3i.GomlRStarSelector;
+import com.jamieswhiteshirt.rtree3i.GomlRStarSplitter;
 import com.jamieswhiteshirt.rtree3i.RTreeMap;
 import draylar.goml.api.Claim;
 import draylar.goml.api.ClaimBox;
@@ -11,8 +14,14 @@ import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 public class WorldClaimComponent implements ClaimComponent {
+    // Default R*-tree selector/splitter overflow on large boxes and build a tree that barely prunes anything
+    private static final Configuration TREE_CONFIGURATION = new ConfigurationBuilder()
+            .star()
+            .selector(new GomlRStarSelector())
+            .splitter(new GomlRStarSplitter())
+            .build();
 
-    private RTreeMap<ClaimBox, Claim> claims = RTreeMap.create(new ConfigurationBuilder().star().build(), ClaimBox::toBox);
+    private RTreeMap<ClaimBox, Claim> claims = RTreeMap.create(TREE_CONFIGURATION, ClaimBox::toBox);
     private final Level world;
 
     public WorldClaimComponent(Level world) {
@@ -36,7 +45,7 @@ public class WorldClaimComponent implements ClaimComponent {
 
     @Override
     public void readData(ValueInput view) {
-        this.claims = RTreeMap.create(new ConfigurationBuilder().star().build(), ClaimBox::rtree3iBox);
+        this.claims = RTreeMap.create(TREE_CONFIGURATION, ClaimBox::rtree3iBox);
         var world = this.world.dimension().identifier();
 
         var version = view.getIntOr("Version", 0);

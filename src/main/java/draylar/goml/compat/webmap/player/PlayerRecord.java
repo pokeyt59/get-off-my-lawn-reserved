@@ -21,9 +21,10 @@ import java.util.UUID;
 
 /**
  * Represents a player record with their name and head icon for web map display.
- * 
+ *
  * <p>If the player or block cannot be resolved, placeholders are used.
- * 
+ * Data requiring web requests is looked up in the background, see {@link #isPending()}.
+ *
  * @see PlayerHeadIcon
  */
 public class PlayerRecord {
@@ -34,10 +35,11 @@ public class PlayerRecord {
     private PlayerHeadIcon playerIcon = null;
     private String name = null;
     private MinecraftServer server = null;
+    private boolean pending = false;
 
     /**
      * Explicitly defines name and icon, cannot be updated after construction.
-     * 
+     *
      * @param playerIcon the player head icon
      * @param playerName the player name, or null for placeholder
      */
@@ -47,7 +49,7 @@ public class PlayerRecord {
     }
     /**
      * Gets player name and icon from server player registry.
-     * 
+     *
      * @param uuid the player's UUID
      * @param server the Minecraft server instance
      * @param name the fallback name if lookup fails, or null
@@ -60,27 +62,30 @@ public class PlayerRecord {
         // If name is still null after player resolution, assume it failed and use defaults
         if (this.name == null) {
             this.name = name;
-            this.playerIcon = new PlayerHeadIcon(null);
         }
 
         if (this.name == null) {
             this.name = Component.translatable("text.goml.webmap.label.unknown", "Unknown?").getString();
         }
+
+        if (this.playerIcon == null) {
+            this.playerIcon = new PlayerHeadIcon(null);
+        }
     }
     /**
      * Gets icon for {@link PolymerHeadBlock} and sets display name.
-     * 
+     *
      * @param headBlock the polymer head block
      * @param displayName the display name, or null for placeholder
      */
-    public PlayerRecord(PolymerHeadBlock headBlock, @Nullable String displayName) {
+    public PlayerRecord(@Nullable PolymerHeadBlock headBlock, @Nullable String displayName) {
         final String DEFAULT_BLOCK_ICON = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAX0lEQVQImWWMyRGAIBAEG4qvq8EQhEEYhpmYAkHwMARykSMBHyBUYb9mu2ZWXSfHzoTzqOdmWxdsHjpITEUDzQYhSD9NUz/MiP1bEEDPzW9t/qqinSemElPBZmyu2XlexGAiqcN7MbsAAAAASUVORK5CYII=";
         this.name = (displayName != null) ? displayName : this.name;
-        this.playerIcon = new PlayerHeadIcon(getHeadImage(headBlock.getPolymerSkinValue(null, null, null)).orElse(DEFAULT_BLOCK_ICON));
+        this.playerIcon = new PlayerHeadIcon(getHeadImage(headBlock != null ? headBlock.getPolymerSkinValue(null, null, null) : null).orElse(DEFAULT_BLOCK_ICON));
     }
 
     /**
-     * @return the name of the player. Only updated by calling {@link #refreshPlayer(MinecraftServer)}.
+     * @return the name of the player. Only updated by calling {@link #resolvePlayer()}.
      */
     public String getName() {
         return this.name;
@@ -91,44 +96,54 @@ public class PlayerRecord {
     public PlayerHeadIcon getHeadIcon() {
         return this.playerIcon;
     }
-    
+
     /**
-     * Resolves the player's name and icon using Minecraft API. Has no effect if not constructed with player UUID (i.e with PolymerHeadBlock).
+     * @return true if some data was missing and is being looked up in the background, so this record should be rebuilt later
+     */
+    public boolean isPending() {
+        return this.pending;
+    }
+
+    /**
+     * Resolves the player's name and icon from cached data. Missing data is looked up in the background,
+     * as it requires web requests. Has no effect if not constructed with player UUID (i.e with PolymerHeadBlock).
      */
     public void resolvePlayer() {
         if(this.uuid != null) {
-            mainTry:
-            try {
-                // Check cache first
-                String json = PlayerRecordCache.getProfile(this.uuid);
+            String json = PlayerRecordCache.getProfile(this.uuid);
 
-                // On cache miss
-                if (json == null) {
-                    json = openConnection(URI.create(PROFILE_LOOKUP_URL + this.uuid));
-                    PlayerRecordCache.putProfile(this.uuid, json);
+            if (json == null) {
+                // Only random (version 4) UUIDs belong to Mojang accounts, offline mode and Floodgate players can't be looked up
+                if (this.uuid.version() == 4) {
+                    var uuid = this.uuid;
+                    this.pending |= PlayerLookups.request("profile:" + uuid, () -> {
+                        if (PlayerRecordCache.getProfile(uuid) == null) {
+                            PlayerRecordCache.putProfile(uuid, openConnection(URI.create(PROFILE_LOOKUP_URL + uuid)));
+                        }
+                    });
                 }
-                
-                Gson gson = new Gson();
-                Map<String, Object> profile = gson.fromJson(json, new TypeToken<Map<String, Object>>(){}.getType());
+            } else {
+                try {
+                    Gson gson = new Gson();
+                    Map<String, Object> profile = gson.fromJson(json, new TypeToken<Map<String, Object>>(){}.getType());
 
-                if (profile == null) {
-                    break mainTry;
-                }
-
-                // Extract player data and create icon
-                this.name = (String) profile.get("name");
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> properties = (List<Map<String, Object>>) profile.get("properties");
-                if (properties != null) {
-                    for (Map<String, Object> property : properties) {
-                        if ("textures".equals(property.get("name"))) {
-                            this.playerIcon = new PlayerHeadIcon(getHeadImage((String) property.get("value")).orElse(null));
-                            break;
+                    if (profile != null) {
+                        // Extract player data and create icon
+                        this.name = (String) profile.get("name");
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> properties = (List<Map<String, Object>>) profile.get("properties");
+                        if (properties != null) {
+                            for (Map<String, Object> property : properties) {
+                                if ("textures".equals(property.get("name"))) {
+                                    this.playerIcon = new PlayerHeadIcon(getHeadImage((String) property.get("value")).orElse(null));
+                                    break;
+                                }
+                            }
                         }
                     }
+                } catch (Exception exception) {
+                    GetOffMyLawn.LOGGER.warn("Unable to get data for player with UUID {}: ", this.uuid, exception);
                 }
-            } catch (Exception exception) {
-                GetOffMyLawn.LOGGER.warn("Unable to get data for player with UUID {}: ", this.uuid, exception);
             }
 
             // If name is still null, attempt to retrieve it from UserCache
@@ -138,7 +153,7 @@ public class PlayerRecord {
         }
     }
 
-	private static Optional<String> getHeadImage(@Nullable String skinData) {
+	private Optional<String> getHeadImage(@Nullable String skinData) {
 		if (skinData == null || skinData.isBlank()) {
 			return Optional.empty();
 		}
@@ -148,7 +163,12 @@ public class PlayerRecord {
 			return Optional.empty();
 		}
 
-		return PlayerHeadRenderer.headImageFromSkinUrl(textureUrl);
+		var image = PlayerHeadRenderer.getCachedHeadImage(textureUrl);
+		if (image.isEmpty()) {
+			this.pending |= PlayerLookups.request("skin:" + textureUrl, () -> PlayerHeadRenderer.loadHeadImage(textureUrl));
+		}
+
+		return image;
 	}
 
     private static String openConnection(URI resourceUri) throws IOException {

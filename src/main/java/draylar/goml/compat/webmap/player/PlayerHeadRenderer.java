@@ -32,8 +32,44 @@ public final class PlayerHeadRenderer {
     private PlayerHeadRenderer() {}
 
     /**
+     * Returns the head image for a skin texture, if it was already downloaded and rendered.
+     *
+     * @param textureUrl the URL of the skin texture
+     * @return an optional containing the base64-encoded png string if cached, or an empty optional otherwise
+     */
+    public static Optional<String> getCachedHeadImage(String textureUrl) {
+        return Optional.ofNullable(HEAD_IMAGE_CACHE.get(textureUrl));
+    }
+
+    /**
+     * Downloads and renders the head image for a skin texture and caches it. This blocks on a web request,
+     * so it shouldn't be called on the server thread.
+     *
+     * @param textureUrl the URL of the skin texture
+     * @throws IOException if the texture couldn't be downloaded or encoded
+     */
+    static void loadHeadImage(String textureUrl) throws IOException {
+        if (HEAD_IMAGE_CACHE.containsKey(textureUrl)) {
+            return;
+        }
+
+        BufferedImage skinTexture = loadSkinTexture(textureUrl);
+        if (skinTexture == null) {
+            throw new IOException("Not an image: " + textureUrl);
+        }
+
+        String encodedImage = encodeImage(renderHead(skinTexture));
+        if (encodedImage.isEmpty()) {
+            throw new IOException("Couldn't encode head image for " + textureUrl);
+        }
+
+        HEAD_IMAGE_CACHE.put(textureUrl, encodedImage);
+    }
+
+    /**
      * Renders the head portion of a skin texture from a URL and encodes it as a base64 png string.
-     * 
+     * This blocks on a web request if not cached, so it shouldn't be called on the server thread.
+     *
      * @param textureUrl the URL of the skin texture
      * @return an optional containing the base64-encoded png string if successful, or an empty optional if failed
      */
@@ -43,23 +79,8 @@ public final class PlayerHeadRenderer {
                 return Optional.empty();
             }
 
-            if (HEAD_IMAGE_CACHE.containsKey(textureUrl)) {
-                return Optional.of(HEAD_IMAGE_CACHE.get(textureUrl));
-            }
-
-            BufferedImage skinTexture = loadSkinTexture(textureUrl);
-            if (skinTexture == null) {
-                return Optional.empty();
-            }
-
-            BufferedImage renderedHead = renderHead(skinTexture);
-            String encodedImage = encodeImage(renderedHead);
-            if (encodedImage.isEmpty()) {
-                return Optional.empty();
-            }
-
-            HEAD_IMAGE_CACHE.put(textureUrl, encodedImage);
-            return Optional.of(encodedImage);
+            loadHeadImage(textureUrl);
+            return getCachedHeadImage(textureUrl);
         } catch (IOException exception) {
             GetOffMyLawn.LOGGER.warn("Failed to download skin texture from {}: {}", textureUrl, exception.getMessage());
             return Optional.empty();

@@ -3,3 +3,7 @@
 - Fixed resized/upgraded claims counting loaded chunks twice, which kept their augments ticking after chunks unloaded.
 - Bedrock players (Geyser/Floodgate) now see claim outlines and force field particles, as colored dust.
 - Mixin audit now only runs in development environment, speeding up server startup.
+- Fixed the claim lookup tree degrading on servers with claims spread far apart (int overflow in rtree-3i-lite volume math), making claim checks up to ~15x faster with many claims.
+- Web map (BlueMap/Dynmap) player names and heads are now looked up in the background, instead of blocking the server on Mojang requests at startup and on claim changes. Markers aren't built at all without a web map mod.
+- Endermen only check for Ender Binding claims when they would actually pick up or place a block.
+- Pistons check claims once per push, instead of twice per moved block.

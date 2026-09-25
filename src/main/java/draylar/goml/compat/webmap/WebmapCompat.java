@@ -69,6 +69,11 @@ public abstract class WebmapCompat {
      * @param claim the claim to create a marker for
      */
     public static final void createClaimMarker(Claim claim) {
+        // Markers are only used by map integrations, no need to build them without any
+        if (INTEGRATIONS.isEmpty()) {
+            return;
+        }
+
         runOnServer(() -> {
             ClaimMarker marker = buildMarker(claim);
             if (marker == null) {
@@ -104,6 +109,10 @@ public abstract class WebmapCompat {
      * @param claim the claim to update markers for
      */
     public static final void updateClaimMarker(Claim claim) {
+        if (INTEGRATIONS.isEmpty()) {
+            return;
+        }
+
         runOnServer(() -> {
             ClaimMarker marker = buildMarker(claim);
             if (marker == null) {
@@ -119,8 +128,26 @@ public abstract class WebmapCompat {
         });
     }
 
+    /**
+     * Rebuild markers that were built while player data was still being looked up in the background.
+     * Called once all queued lookups finish.
+     */
+    public static final void refreshPendingMarkers() {
+        runOnServer(() -> {
+            for (var entry : MARKERS.entrySet()) {
+                if (entry.getValue().isPending()) {
+                    updateClaimMarker(entry.getKey());
+                }
+            }
+        });
+    }
+
     // Update all claim markers where the player is an owner or trusted
     private static final void updateClaimMarkersForPlayer(ServerPlayer player) {
+        if (INTEGRATIONS.isEmpty()) {
+            return;
+        }
+
         var uuid = player.getUUID();
         for (ServerLevel world : _server.getAllLevels()) {
             ClaimUtils.getClaimsOwnedBy(world, uuid).forEach(claim -> updateClaimMarker(claim.getValue()));

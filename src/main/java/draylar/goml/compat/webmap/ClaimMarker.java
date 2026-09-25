@@ -133,6 +133,16 @@ public final class ClaimMarker {
 		return this.claim;
 	}
 
+	/**
+	 * @return true if some player data is still being looked up, so this marker should be rebuilt once it's available
+	 */
+	public boolean isPending() {
+		return this.claimAnchorType.isPending()
+			|| this.owners.stream().anyMatch(PlayerRecord::isPending)
+			|| this.trusted.stream().anyMatch(PlayerRecord::isPending)
+			|| this.augments.stream().anyMatch(PlayerRecord::isPending);
+	}
+
 	public ServerLevel getWorld() {
 		return this.world;
 	}
