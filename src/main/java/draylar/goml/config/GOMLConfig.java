@@ -63,6 +63,7 @@ public class GOMLConfig {
     public boolean checkForUpdates = true;
     public String updateChannel = "release";
     public int updateCheckIntervalHours = 12;
+    public boolean autoUpdate = false;
 
     public boolean canInteract(Block block) {
         return this.allowedBlockInteraction.contains(block);

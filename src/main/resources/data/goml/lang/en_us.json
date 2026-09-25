@@ -168,5 +168,6 @@
   "text.goml.webmap.label.trusted": "Trusted:",
   "text.goml.webmap.label.augments": "Augments:",
   "text.goml.update.available": "Get Off My Lawn %s is available on the %s channel (this server runs %s)",
-  "text.goml.update.download": "[Download]"
+  "text.goml.update.download": "[Download]",
+  "text.goml.update.downloaded": "Get Off My Lawn %s (%s channel) was downloaded and will be installed on the next restart (this server runs %s)"
 }
