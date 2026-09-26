@@ -17,6 +17,7 @@ import net.minecraft.world.level.block.Block;
 import org.apache.commons.io.IOUtils;
 
 import java.io.*;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -111,6 +112,7 @@ public class GOMLConfig {
                 String json = IOUtils.toString(new InputStreamReader(new FileInputStream(configFile), StandardCharsets.UTF_8));
 
                 config = BaseGson.GSON.fromJson(json, GOMLConfig.class);
+                warnAboutUnknownOptions(json);
             } else {
                 config = new GOMLConfig();
             }
@@ -128,6 +130,35 @@ public class GOMLConfig {
             GetOffMyLawn.LOGGER.error("Something went wrong while reading config!");
             exception.printStackTrace();
             return new GOMLConfig();
+        }
+    }
+
+    // Gson skips options it doesn't know and saving drops them, so a typo would otherwise just silently disappear
+    private static void warnAboutUnknownOptions(String json) {
+        JsonElement element;
+        try {
+            element = JsonParser.parseString(json);
+        } catch (JsonParseException e) {
+            return;
+        }
+        if (!element.isJsonObject()) {
+            return;
+        }
+
+        var options = new HashMap<String, String>();
+        for (var field : GOMLConfig.class.getFields()) {
+            if (!Modifier.isStatic(field.getModifiers())) {
+                options.put(field.getName().toLowerCase(Locale.ROOT).replace("_", ""), field.getName());
+            }
+        }
+
+        for (var key : element.getAsJsonObject().keySet()) {
+            var option = options.get(key.toLowerCase(Locale.ROOT).replace("_", ""));
+            if (option == null) {
+                GetOffMyLawn.LOGGER.warn("Unknown option '{}' in getoffmylawn.json, it will be removed from the file", key);
+            } else if (!option.equals(key)) {
+                GetOffMyLawn.LOGGER.warn("Unknown option '{}' in getoffmylawn.json, did you mean '{}'? It will be removed from the file", key, option);
+            }
         }
     }
 

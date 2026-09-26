@@ -10,3 +10,4 @@
 - Added an update checker: on startup (and every 12 hours) it checks this fork's GitHub releases and tells the console and admins when a newer version is out. `updateChannel` picks "release" or "alpha" (the latest GitHub Actions build), `checkForUpdates` turns it off.
 - Added `autoUpdate` (off by default): dedicated servers download the new version, verify it against GitHub's checksum and install it when the server stops. Only the previous version is kept, as a `.jar.old` backup.
 - The /goml help GitHub link and the mod's contact links now point to this fork.
+- Unknown or misspelled options in getoffmylawn.json are now logged with a suggestion (e.g. 'updatechannel', did you mean 'updateChannel'?), instead of silently disappearing from the file.
