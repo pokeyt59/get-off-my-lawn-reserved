@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import draylar.goml.GetOffMyLawn;
+import draylar.goml.config.GOMLConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -14,6 +15,7 @@ import net.fabricmc.loader.api.VersionParsingException;
 import net.fabricmc.loader.api.metadata.CustomValue;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -177,6 +179,16 @@ public final class UpdateChecker {
 
         @Override
         public void run() {
+            this.check(null);
+        }
+
+        /**
+         * Runs on the update checker thread.
+         *
+         * @param requester player who asked for this check with a command, they get the result as command feedback instead
+         * @return null if the checker was stopped or restarted meanwhile
+         */
+        private @Nullable Result check(@Nullable ServerPlayer requester) {
             Update update;
             try {
                 update = findUpdate(this.channel, this.current);
@@ -186,21 +198,22 @@ public final class UpdateChecker {
                 }
                 // No stack trace, a failed check isn't a problem with the mod
                 GetOffMyLawn.LOGGER.warn("Couldn't check for Get Off My Lawn updates ({} channel): {}", this.channel.id, e.toString());
-                return;
+                return new Result(null, false, e.toString(), true);
             }
 
             if (!publish(this, update)) {
-                return;
+                return null;
             }
 
             if (update == null) {
                 // E.g. the release it was downloaded from got deleted
                 discardPending(this);
-                if (this.firstCheck) {
+                var logged = this.firstCheck;
+                if (logged) {
                     GetOffMyLawn.LOGGER.info("Get Off My Lawn {} is up to date ({} channel)", this.current.version.getFriendlyString(), this.channel.id);
                 }
                 this.firstCheck = false;
-                return;
+                return new Result(null, false, null, logged);
             }
 
             var downloaded = false;
@@ -215,7 +228,8 @@ public final class UpdateChecker {
                 }
             }
 
-            if (!update.equals(this.lastAnnounced) || downloaded != this.lastAnnouncedDownloaded) {
+            var announce = !update.equals(this.lastAnnounced) || downloaded != this.lastAnnouncedDownloaded;
+            if (announce) {
                 if (downloaded) {
                     GetOffMyLawn.LOGGER.info("Downloaded Get Off My Lawn {} from the {} channel (running {}), it will be installed when the server stops",
                             update.version, this.channel.id, this.current.version.getFriendlyString());
@@ -230,7 +244,7 @@ public final class UpdateChecker {
                         return;
                     }
                     for (var player : this.server.getPlayerList().getPlayers()) {
-                        if (canBeNotified(player)) {
+                        if (player != requester && canBeNotified(player)) {
                             player.sendSystemMessage(message(update), false);
                         }
                     }
@@ -240,7 +254,71 @@ public final class UpdateChecker {
             }
 
             this.firstCheck = false;
+            return new Result(update, downloaded, null, announce);
         }
+    }
+
+    /**
+     * @param error  why the check failed, null if it didn't
+     * @param logged whether the check wrote this result to the log
+     */
+    private record Result(@Nullable Update update, boolean downloaded, @Nullable String error, boolean logged) {
+    }
+
+    /**
+     * Checks for updates right away, for /goml admin update. The result is sent to the command source.
+     */
+    public static int checkNow(CommandSourceStack source) {
+        Session current;
+        synchronized (UpdateChecker.class) {
+            current = session;
+        }
+        if (current == null) {
+            source.sendFailure(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.command/update.disabled").withStyle(ChatFormatting.RED)));
+            return 0;
+        }
+
+        var requester = source.getPlayer();
+        // The console already sees whatever the check logs
+        var console = requester == null && "Server".equals(source.getTextName());
+        source.sendSuccess(() -> GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.command/update.checking", current.channel.id)), false);
+
+        EXECUTOR.execute(() -> {
+            var result = current.check(requester);
+            if (result == null || (console && result.logged)) {
+                return;
+            }
+
+            current.server.execute(() -> source.sendSuccess(() -> feedback(current, result), false));
+        });
+        return 1;
+    }
+
+    private static Component feedback(Session session, Result result) {
+        if (result.error != null) {
+            return GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.update.failed", result.error).withStyle(ChatFormatting.RED));
+        }
+        if (result.update == null) {
+            return GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.update.up_to_date", session.current.version.getFriendlyString(), session.channel.id));
+        }
+        return message(result.update);
+    }
+
+    /**
+     * Applies reloaded update settings. The checker is only restarted, and checks right away, when they changed.
+     *
+     * @return true if the update settings changed
+     */
+    public static boolean reload(MinecraftServer server, GOMLConfig previous) {
+        var config = GetOffMyLawn.CONFIG;
+        var changed = config.checkForUpdates != previous.checkForUpdates
+                || !String.valueOf(config.updateChannel).equalsIgnoreCase(String.valueOf(previous.updateChannel))
+                || config.updateCheckIntervalHours != previous.updateCheckIntervalHours
+                || config.autoUpdate != previous.autoUpdate;
+        if (changed) {
+            start(server);
+        }
+        return changed;
     }
 
     private static @Nullable Update findUpdate(Channel channel, Build current) throws IOException, InterruptedException {

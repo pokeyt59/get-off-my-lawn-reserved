@@ -136,6 +136,10 @@ public class ClaimCommand {
                                     .requires(FabricPermissionBridge.require(id("command/admin/reload"), PermissionLevel.OWNERS))
                                     .executes(ClaimCommand::reload)
                             )
+                            .then(literal("update")
+                                    .requires(FabricPermissionBridge.require(id("command/admin/update"), PermissionLevel.OWNERS))
+                                    .executes(context -> UpdateChecker.checkNow(context.getSource()))
+                            )
                             .then(literal("list")
                                     .requires(FabricPermissionBridge.require(id("command/list"), true))
                                     .then(Commands.argument("player", GameProfileArgument.gameProfile())
@@ -491,9 +495,12 @@ public class ClaimCommand {
     }
 
     private static int reload(CommandContext<CommandSourceStack> context) {
+        var previous = GetOffMyLawn.CONFIG;
         GetOffMyLawn.CONFIG = GOMLConfig.loadOrCreateConfig();
-        UpdateChecker.start(context.getSource().getServer());
-        context.getSource().sendSuccess(() -> prefix(Component.literal("Reloaded config")), false);
+        var updateSettingsChanged = UpdateChecker.reload(context.getSource().getServer(), previous);
+        context.getSource().sendSuccess(() -> prefix(Component.literal(updateSettingsChanged
+                ? "Reloaded config, update settings changed so checking for updates"
+                : "Reloaded config")), false);
         return 1;
     }
 

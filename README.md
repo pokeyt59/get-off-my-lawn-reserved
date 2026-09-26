@@ -49,7 +49,7 @@ To upgrade your claim, place an Anchor Augment next to the core Claim Anchor. An
 - Explosion Controller: Allows toggling explosion protection
 
 ## Config:
-You can find config file in `./config/getoffmylawn.json`. To reload it, just type `/goml admin reload` in chat/console.
+You can find config file in `./config/getoffmylawn.json`. To reload it, just type `/goml admin reload` in chat/console (it only checks for updates when the update options changed). `/goml admin update` checks for updates right away.
 
 ```json5
 {

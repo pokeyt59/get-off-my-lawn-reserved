@@ -11,3 +11,4 @@
 - Added `autoUpdate` (off by default): dedicated servers download the new version, verify it against GitHub's checksum and install it when the server stops. The previous version is kept as a `.jar.old` backup, `autoUpdateBackups` sets how many are kept (1 by default).
 - The /goml help GitHub link and the mod's contact links now point to this fork.
 - Unknown or misspelled options in getoffmylawn.json are now logged with a suggestion (e.g. 'updatechannel', did you mean 'updateChannel'?), instead of silently disappearing from the file.
+- Added `/goml admin update` to check for updates right away (and download them with autoUpdate on). `/goml admin reload` only checks for updates when the update options changed.
