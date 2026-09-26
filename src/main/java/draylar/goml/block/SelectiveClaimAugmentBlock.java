@@ -79,10 +79,10 @@ public class SelectiveClaimAugmentBlock extends ClaimAugmentBlock {
                         var mode = currentMode.getNext();
                         claim.setData(key, mode);
                         for (var p : claim.getPlayersIn(player.level().getServer())) {
-                            this.removeEffect(player);
+                            this.removeEffect(p);
 
                             if (this.canApply(claim, p)) {
-                                this.applyEffect(player);
+                                this.applyEffect(p);
                             }
                         }
                         change.getValue().run();

@@ -19,6 +19,9 @@ import java.util.stream.Collectors;
 
 @ApiStatus.Internal
 public class PlaceholdersReg {
+    // Stands in for escaped colons (\:) while claim_info's argument is split on colons
+    private static final String ESCAPED_COLON = "&bslsh\001;";
+
     public static void init() {
         var parser = TagParser.QUICK_TEXT_WITH_STF;
 
@@ -53,7 +56,7 @@ public class PlaceholdersReg {
             }
         });
 
-        Placeholders.registerServer(Identifier.fromNamespaceAndPath("goml", "claim_owners"), (ctx, arg) -> {
+        Placeholders.registerServer(Identifier.fromNamespaceAndPath("goml", "claim_owners_uuid"), (ctx, arg) -> {
             if (!ctx.hasPlayer()) {
                 return PlaceholderResult.invalid("No player!");
             }
@@ -159,16 +162,16 @@ public class PlaceholdersReg {
             var cantBuildText = GetOffMyLawn.CONFIG.placeholderClaimCantBuildInfo.node();
 
             if (arg != null) {
-                String[] texts = arg.replace("\\:", "&bslsh\001;").split(":");
+                String[] texts = arg.replace("\\:", ESCAPED_COLON).split(":");
 
                 if (texts.length > 0) {
-                    wildnessText = parser.parseComponent(texts[0].replace("&bslsh;\001", ":"), ParserContext.of());
+                    wildnessText = parser.parseComponent(texts[0].replace(ESCAPED_COLON, ":"), ParserContext.of());
                 }
                 if (texts.length > 1) {
-                    canBuildText = parser.parseNode(texts[1].replace("&bslsh;\001", ":"));
+                    canBuildText = parser.parseNode(texts[1].replace(ESCAPED_COLON, ":"));
                 }
                 if (texts.length > 2) {
-                    cantBuildText = parser.parseNode(texts[2].replace("&bslsh;\001", ":"));
+                    cantBuildText = parser.parseNode(texts[2].replace(ESCAPED_COLON, ":"));
                 }
             }
 

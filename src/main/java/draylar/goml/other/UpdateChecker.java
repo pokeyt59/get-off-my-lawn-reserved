@@ -274,14 +274,14 @@ public final class UpdateChecker {
             current = session;
         }
         if (current == null) {
-            source.sendFailure(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.command/update.disabled").withStyle(ChatFormatting.RED)));
+            source.sendFailure(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.command.update.disabled").withStyle(ChatFormatting.RED)));
             return 0;
         }
 
         var requester = source.getPlayer();
         // The console already sees whatever the check logs
         var console = requester == null && "Server".equals(source.getTextName());
-        source.sendSuccess(() -> GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.command/update.checking", current.channel.id)), false);
+        source.sendSuccess(() -> GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.command.update.checking", current.channel.id)), false);
 
         EXECUTOR.execute(() -> {
             var result = current.check(requester);

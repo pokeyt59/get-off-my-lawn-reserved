@@ -12,3 +12,14 @@
 - The /goml help GitHub link and the mod's contact links now point to this fork.
 - Unknown or misspelled options in getoffmylawn.json are now logged with a suggestion (e.g. 'updatechannel', did you mean 'updateChannel'?), instead of silently disappearing from the file.
 - Added `/goml admin update` to check for updates right away (and download them with autoUpdate on). `/goml admin reload` only checks for updates when the update options changed.
+- Fixed command messages (trust, untrust, escape, help, admin info...) showing raw translation keys instead of text.
+- Fixed `%goml:claim_owners%` showing UUIDs instead of names (the UUID version is now `%goml:claim_owners_uuid%`), and escaped colons (`\:`) in `%goml:claim_info%`'s argument.
+- The claim limit (`maxClaimsPerPlayer` / `goml.claim_limit`) now counts claims in all dimensions instead of per dimension (`goml.claim_limit/<dimension>` still counts only that dimension), and the limit message shows the limit.
+- Chaos Zone and Lake Spirit's Grace refresh their effects about once a second instead of every tick, and remove them when you leave.
+- Fixed changing an augment's mode (e.g. Heaven's Wings) applying it to the player using the menu instead of the players in the claim.
+- Heaven's Wings: flying out of the claim (or losing the wings mid-air) gives Slow Falling until you land.
+- Augment blocks find their claim with a position lookup instead of going through every claim when their chunk loads.
+- New `claimEnterLeaveMessages` option (off by default): "Entering/Leaving Steve's claim" in the action bar.
+- "This block is protected by Steve's claim!": protection messages now name the claim's owner, also for buckets.
+- `/goml trust <player> all` and `/goml untrust <player> all` apply to all your claims; trust commands tell you when you aren't standing in a claim you own.
+- `/goml list` shows your claims from every dimension.

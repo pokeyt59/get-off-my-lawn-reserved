@@ -77,6 +77,12 @@ public class ClaimUtils {
      * @return claims at the given position in the given world
      */
     public static Selection<Entry<ClaimBox, Claim>> getClaimsWithOrigin(LevelReader world, BlockPos pos) {
+        // A claim contains its origin, so looking at that position avoids going through every claim
+        var claims = getClaimsAt(world, pos).filter(x -> x.getValue().getOrigin().equals(pos));
+        if (claims.isNotEmpty()) {
+            return claims;
+        }
+
         return GetOffMyLawn.CLAIM.get(world).getClaims().entries().filter(x -> x.getValue().getOrigin().equals(pos));
     }
 
@@ -365,6 +371,21 @@ public class ClaimUtils {
         }
 
         return claimAnchor;
+    }
+
+    /**
+     * @return the name of one of the claim's owners, for messages, or null if none is known to the server
+     */
+    @Nullable
+    public static String getOwnerName(MinecraftServer server, Claim claim) {
+        for (var owner : claim.getOwners()) {
+            var profile = server.services().nameToIdCache().get(owner);
+            if (profile.isPresent()) {
+                return profile.get().name();
+            }
+        }
+
+        return null;
     }
 
     public static List<Component> getClaimText(MinecraftServer server, Claim claim) {

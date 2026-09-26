@@ -5,8 +5,9 @@ import com.jamieswhiteshirt.rtree3i.Selection;
 import draylar.goml.api.ClaimBox;
 import draylar.goml.api.Claim;
 import draylar.goml.api.ClaimUtils;
+import draylar.goml.api.PermissionReason;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -18,6 +19,7 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import org.apache.commons.lang3.mutable.MutableObject;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -46,8 +48,19 @@ public class BucketItemMixin extends Item {
 
         HitResult hitResult = getPlayerPOVHitResult(world, user, this.content == Fluids.EMPTY ? ClipContext.Fluid.SOURCE_ONLY : ClipContext.Fluid.NONE);
 
-        if(!ClaimUtils.canModify(world, ((BlockHitResult) hitResult).getBlockPos(), user)) {
-            user.sendOverlayMessage(Component.literal("This block is protected by a claim."));
+        var pos = ((BlockHitResult) hitResult).getBlockPos();
+        if(!ClaimUtils.canModify(world, pos, user)) {
+            // Named after the owner of the claim that's in the way
+            var owner = new MutableObject<String>();
+            if (world instanceof ServerLevel serverWorld) {
+                ClaimUtils.getClaimsAt(world, pos).forEach(entry -> {
+                    if (owner.getValue() == null && !entry.getValue().hasPermission(user)) {
+                        owner.setValue(ClaimUtils.getOwnerName(serverWorld.getServer(), entry.getValue()));
+                    }
+                });
+            }
+
+            user.sendOverlayMessage(PermissionReason.BLOCK_PROTECTED.getReason(owner.getValue()));
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }

@@ -7,9 +7,12 @@ import draylar.goml.other.FabricPermissionBridge;
 import draylar.goml.registry.GOMLBlocks;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static draylar.goml.GetOffMyLawn.id;
@@ -49,18 +52,29 @@ public class ClaimAnchorBlockItem extends TooltippedBlockItem {
         var checkBox = ClaimUtils.createClaimBox(pos, radius);
 
         if (!ClaimUtils.isInAdminMode(context.getPlayer())) {
-            var count = ClaimUtils.getClaimsOwnedBy(context.getLevel(), Objects.requireNonNull(context.getPlayer()).getUUID()).filter(x -> x.getValue().getType() != GOMLBlocks.ADMIN_CLAIM_ANCHOR.getFirst()).count();
-
+            var uuid = Objects.requireNonNull(context.getPlayer()).getUUID();
             var allowedCount = FabricPermissionBridge.checkPermissionInteger(context.getPlayer(), id("claim_limit"));
-            var allowedCount2 = FabricPermissionBridge.checkPermissionInteger(context.getPlayer(), id("claim_limit/" +
+            var dimensionAllowedCount = FabricPermissionBridge.checkPermissionInteger(context.getPlayer(), id("claim_limit/" +
                     context.getLevel().dimension().identifier().getNamespace() + "/" + context.getLevel().dimension().identifier().getPath()));
 
-            var maxCount = allowedCount2.orElse(allowedCount.orElse(GetOffMyLawn.CONFIG.maxClaimsPerPlayer));
+            // A per-dimension limit counts the claims in this dimension, the global limit counts them in all dimensions
+            long count;
+            int maxCount;
+            if (dimensionAllowedCount.isPresent()) {
+                maxCount = dimensionAllowedCount.getAsInt();
+                count = countOwnedClaims(context.getLevel(), uuid);
+            } else {
+                maxCount = allowedCount.orElse(GetOffMyLawn.CONFIG.maxClaimsPerPlayer);
+                count = 0;
+                for (var level : ((ServerLevel) context.getLevel()).getServer().getAllLevels()) {
+                    count += countOwnedClaims(level, uuid);
+                }
+            }
 
             if (maxCount != -1
                     && count >= maxCount
             ) {
-                context.getPlayer().sendSystemMessage(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.cant_place_claim.max_count_reached", count, GetOffMyLawn.CONFIG.maxClaimsPerPlayer).withStyle(ChatFormatting.RED)));
+                context.getPlayer().sendSystemMessage(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.cant_place_claim.max_count_reached", count, maxCount).withStyle(ChatFormatting.RED)));
                 return false;
             }
 
@@ -95,5 +109,10 @@ public class ClaimAnchorBlockItem extends TooltippedBlockItem {
         }
 
         return super.canPlace(context, state);
+    }
+
+    // Admin claims don't count towards the limit
+    private static long countOwnedClaims(Level level, UUID player) {
+        return ClaimUtils.getClaimsOwnedBy(level, player).filter(x -> x.getValue().getType() != GOMLBlocks.ADMIN_CLAIM_ANCHOR.getFirst()).count();
     }
 }

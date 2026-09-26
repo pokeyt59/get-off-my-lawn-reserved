@@ -61,6 +61,8 @@ public class GOMLConfig {
 
     public String claimColorSource = "location";
 
+    public boolean claimEnterLeaveMessages = false;
+
     public boolean checkForUpdates = true;
     public String updateChannel = "release";
     public int updateCheckIntervalHours = 12;

@@ -99,6 +99,7 @@ You can find config file in `./config/getoffmylawn.json`. To reload it, just typ
   "placeholderClaimCanBuildInfo": "${owners} <gray>(<green>${anchor}</green>)",
   "placeholderClaimCantBuildInfo": "${owners} <gray>(<red>${anchor}</red>)",
   "claimColorSource": "location",       // either "location" or "player" - "location" will chose the color based on the location of the claim (hash of coordinates), "player" will chose the color based on the owner of the claim (hash of UUID).
+  "claimEnterLeaveMessages": false,     // Show "Entering/Leaving <owner>'s claim" in the action bar when players walk into or out of a claim
   "checkForUpdates": true,              // Checks GitHub for a newer version and tells the console and admins (goml.update_notify permission, or level 3) about it. Nothing is downloaded.
   "updateChannel": "release",           // either "release" (normal releases) or "alpha" (the latest development build, from the main and claude/* branches)
   "updateCheckIntervalHours": 12,       // How often to check again while the server runs, 0 to only check on startup

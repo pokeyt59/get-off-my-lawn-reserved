@@ -113,6 +113,10 @@
   "text.goml.command.owner_removed": "%s has been removed as an owner to this claim.",
   "text.goml.command.trusted": "%s has been added as a trusted member to this claim.",
   "text.goml.command.untrusted": "%s has been removed as a trusted member from this claim.",
+  "text.goml.command.trusted_all": "Trusted %s in %s claims",
+  "text.goml.command.untrusted_all": "Removed %s from %s claims",
+  "text.goml.command.not_in_owned_claim": "You aren't standing in a claim you own!",
+  "text.goml.command.no_owned_claims": "You don't own any claims!",
   "text.goml.command.add_self": "You are already allowed in this claim!",
   "text.goml.command.remove_self": "You can't remove yourself from this claim!",
   "text.goml.command.removed_claim": "Removed claim in %s with origin of %s.",
@@ -122,8 +126,17 @@
   "text.goml.block_protected": "This block is protected by a claim!",
   "text.goml.entity_protected": "This entity is protected by a claim!",
   "text.goml.area_protected": "This area is protected by a claim!",
+  "text.goml.block_protected.owner": "This block is protected by %s's claim!",
+  "text.goml.entity_protected.owner": "This entity is protected by %s's claim!",
+  "text.goml.area_protected.owner": "This area is protected by %s's claim!",
+  "text.goml.claim_enter": "Entering %s's claim",
+  "text.goml.claim_enter.own": "Entering your claim",
+  "text.goml.claim_enter.unknown": "Entering a claim",
+  "text.goml.claim_leave": "Leaving %s's claim",
+  "text.goml.claim_leave.own": "Leaving your claim",
+  "text.goml.claim_leave.unknown": "Leaving a claim",
 
-  "text.goml.cant_place_claim.max_count_reached": "You can't place any more claims! You have %s claims already!",
+  "text.goml.cant_place_claim.max_count_reached": "You can't place any more claims! You have %s claims already (limit: %s)!",
   "text.goml.cant_place_claim.blacklisted_area": "You can't place this claim in %s at %s! This area is blacklisted!",
   "text.goml.cant_place_claim.collides_with": "You can't place this claim, because it would collide with others! Colliding claims: %s",
   "text.goml.cant_place_claim.admin_only": "You can't place this claim, because it requires enabled Admin Mode!",
@@ -172,6 +185,6 @@
   "text.goml.update.downloaded": "Get Off My Lawn %s (%s channel) was downloaded and will be installed on the next restart (this server runs %s)",
   "text.goml.update.up_to_date": "Get Off My Lawn %s is up to date (%s channel)",
   "text.goml.update.failed": "Couldn't check for updates: %s",
-  "text.goml.command/update.checking": "Checking for updates on the %s channel...",
-  "text.goml.command/update.disabled": "Update checks are turned off (checkForUpdates is false)"
+  "text.goml.command.update.checking": "Checking for updates on the %s channel...",
+  "text.goml.command.update.disabled": "Update checks are turned off (checkForUpdates is false)"
 }

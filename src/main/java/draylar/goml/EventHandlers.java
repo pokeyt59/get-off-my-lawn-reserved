@@ -14,6 +14,7 @@ import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.player.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.OwnableEntity;
@@ -184,14 +185,20 @@ public class EventHandlers {
             return InteractionResult.PASS;
         }
 
-        // No need to check for no claims first, anyMatch is false for them anyway
-        boolean noPermission = claims.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !boxInfo.getValue().hasPermission(player));
+        // First claim the player can't build in, it's named in the message. Nothing is found without claims.
+        var denying = new MutableObject<Claim>();
+        claims.forEach((Entry<ClaimBox, Claim> boxInfo) -> {
+            if (denying.getValue() == null && !boxInfo.getValue().hasPermission(player)) {
+                denying.setValue(boxInfo.getValue());
+            }
+        });
 
-        if (noPermission && !ClaimUtils.isInAdminMode(player)) {
+        if (denying.getValue() != null && !ClaimUtils.isInAdminMode(player)) {
             InteractionResult check = ClaimEvents.PERMISSION_DENIED.invoker().check(player, player.level(), hand, pos, reason);
 
             if (check.consumesAction() || check.equals(InteractionResult.PASS)) {
-                player.sendOverlayMessage(reason.getReason());
+                var owner = player.level() instanceof ServerLevel world ? ClaimUtils.getOwnerName(world.getServer(), denying.getValue()) : null;
+                player.sendOverlayMessage(reason.getReason(owner));
                 return InteractionResult.FAIL;
             }
         }

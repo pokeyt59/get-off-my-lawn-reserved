@@ -29,7 +29,9 @@ public class ClaimListGui extends PagedGui {
     protected ClaimListGui(ServerPlayer player, GameProfile target) {
         super(player, null);
 
-        ClaimUtils.getClaimsWithAccess(player.level(), target.id()).forEach(this.claimList::add);
+        for (var world : player.level().getServer().getAllLevels()) {
+            ClaimUtils.getClaimsWithAccess(world, target.id()).forEach(this.claimList::add);
+        }
         this.setTitle(Component.translatable(
                 player.getGameProfile().id().equals(target.id()) ? "text.goml.your_claims" : "text.goml.someones_claims",
                 target.name()

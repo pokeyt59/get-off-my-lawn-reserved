@@ -14,6 +14,7 @@ import draylar.goml.compat.BedrockCompat;
 import draylar.goml.compat.webmap.WebmapCompat;
 import draylar.goml.other.CardboardWarning;
 import draylar.goml.other.ClaimCommand;
+import draylar.goml.other.ClaimMessages;
 import draylar.goml.config.GOMLConfig;
 import draylar.goml.other.PlaceholdersReg;
 import draylar.goml.other.UpdateChecker;
@@ -105,6 +106,7 @@ public class GetOffMyLawn implements ModInitializer, LevelComponentInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(WebmapCompat::init);
         ServerLifecycleEvents.SERVER_STARTED.register(BedrockCompat::init);
         UpdateChecker.init();
+        ClaimMessages.init();
 
         ServerChunkEvents.CHUNK_LOAD.register((world, chunk, created) -> GetOffMyLawn.onChunkEvent(world, chunk, Claim::internal_incrementChunks));
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GetOffMyLawn.onChunkEvent(world, chunk, Claim::internal_decrementChunks));

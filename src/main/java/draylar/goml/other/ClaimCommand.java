@@ -70,18 +70,22 @@ public class ClaimCommand {
                     .then(literal("trust")
                             .requires(FabricPermissionBridge.require(id("command/trust"), true))
                             .then(Commands.argument("player", GameProfileArgument.gameProfile())
-                                    .executes(context -> trust(context, false))
+                                    .executes(context -> trust(context, false, false))
+                                    .then(literal("all")
+                                            .executes(context -> trust(context, false, true)))
                             )
                     )
                     .then(literal("untrust")
                             .requires(FabricPermissionBridge.require(id("command/untrust"), true))
                             .then(Commands.argument("player", GameProfileArgument.gameProfile())
-                                    .executes((ctx) -> ClaimCommand.untrust(ctx, false)))
+                                    .executes((ctx) -> ClaimCommand.untrust(ctx, false, false))
+                                    .then(literal("all")
+                                            .executes((ctx) -> ClaimCommand.untrust(ctx, false, true))))
                     )
                     .then(literal("addowner")
                             .requires(FabricPermissionBridge.require(id("command/addowner"), true))
                             .then(Commands.argument("player", GameProfileArgument.gameProfile())
-                                    .executes(context -> trust(context, true)))
+                                    .executes(context -> trust(context, true, false)))
                     )
 
                     .then(literal("list")
@@ -114,7 +118,7 @@ public class ClaimCommand {
                             .then(literal("removeowner")
                                     .requires(FabricPermissionBridge.require(id("command/admin/removeowner"), true))
                                     .then(Commands.argument("player", GameProfileArgument.gameProfile())
-                                            .executes((ctx) -> ClaimCommand.untrust(ctx, true)))
+                                            .executes((ctx) -> ClaimCommand.untrust(ctx, true, false)))
                             )
                             .then(literal("info")
                                     .requires(FabricPermissionBridge.require(id("command/admin/info"), PermissionLevel.ADMINS))
@@ -215,10 +219,10 @@ public class ClaimCommand {
                     player.connection.send(new ClientboundSetEntityMotionPacket(player.getVehicle()));
                 }
             });
-            context.getSource().sendSuccess(() -> prefix(Component.translatable("text.goml.command/escaped").withStyle(ChatFormatting.GREEN)), false);
+            context.getSource().sendSuccess(() -> prefix(Component.translatable("text.goml.command.escaped").withStyle(ChatFormatting.GREEN)), false);
 
         } else {
-            context.getSource().sendSuccess(() -> prefix(Component.translatable("text.goml.command/cant_escape").withStyle(ChatFormatting.RED)), false);
+            context.getSource().sendSuccess(() -> prefix(Component.translatable("text.goml.command.cant_escape").withStyle(ChatFormatting.RED)), false);
 
         }
 
@@ -253,10 +257,10 @@ public class ClaimCommand {
             int numberOfClaimsWorld = worldClaims.size();
             numberOfClaimsTotal.addAndGet(1);
 
-            player.sendSystemMessage(prefix(Component.translatable("text.goml.command/number_in", world.dimension().identifier(), numberOfClaimsWorld)), false);
+            player.sendSystemMessage(prefix(Component.translatable("text.goml.command.number_in", world.dimension().identifier(), numberOfClaimsWorld)), false);
         });
 
-        player.sendSystemMessage(prefix(Component.translatable("text.goml.command/number_all", numberOfClaimsTotal.get()).withStyle(ChatFormatting.WHITE)), false);
+        player.sendSystemMessage(prefix(Component.translatable("text.goml.command.number_all", numberOfClaimsTotal.get()).withStyle(ChatFormatting.WHITE)), false);
 
         return 1;
     }
@@ -347,7 +351,7 @@ public class ClaimCommand {
         var worldClaims = GetOffMyLawn.CLAIM.get(world).getClaims();
         int numberOfClaims = worldClaims.size();
 
-        player.sendSystemMessage(prefix(Component.translatable("text.goml.command/number_in", world.dimension().identifier(), numberOfClaims)), false);
+        player.sendSystemMessage(prefix(Component.translatable("text.goml.command.number_in", world.dimension().identifier(), numberOfClaims)), false);
 
         return 1;
     }
@@ -365,7 +369,7 @@ public class ClaimCommand {
         if (!world.isClientSide()) {
             ClaimUtils.getClaimsAt(world, player.blockPosition()).forEach(claimedArea -> {
                 claimedArea.getValue().destroy();
-                player.sendSystemMessage(prefix(Component.translatable("text.goml.command/removed_claim", world.dimension().identifier().toString(), claimedArea.getValue().getOrigin().toShortString())), false);
+                player.sendSystemMessage(prefix(Component.translatable("text.goml.command.removed_claim", world.dimension().identifier().toString(), claimedArea.getValue().getOrigin().toShortString())), false);
                 var blockEntity = world.getBlockEntity(claimedArea.getValue().getOrigin(), GOMLEntities.CLAIM_ANCHOR);
 
                 if (blockEntity.isPresent()) {
@@ -392,7 +396,7 @@ public class ClaimCommand {
 
         Function<String, Component> write = (command) -> Component.literal("/goml " + command)
                 .append(Component.literal(" - ").withStyle(ChatFormatting.GRAY))
-                .append(Component.translatable("text.goml.command/help." + command).setStyle(Style.EMPTY.withColor(0xededed)));
+                .append(Component.translatable("text.goml.command.help." + command).setStyle(Style.EMPTY.withColor(0xededed)));
 
         player.sendSystemMessage(Component.literal("[").withStyle(ChatFormatting.DARK_GRAY).append(Component.literal("Get Off My Lawn").setStyle(Style.EMPTY.withColor(0xa1ff59))).append("]"), false);
         player.sendSystemMessage(Component.literal("-------------------------------------").withStyle(ChatFormatting.DARK_GRAY), false);
@@ -425,7 +429,7 @@ public class ClaimCommand {
         var claim = ClaimUtils.getClaimsAt(player.level(), player.blockPosition());
 
         if (claim.isEmpty()) {
-            player.sendSystemMessage(prefix(Component.translatable("text.goml.command/no_claims").withStyle(ChatFormatting.RED)), false);
+            player.sendSystemMessage(prefix(Component.translatable("text.goml.command.no_claims").withStyle(ChatFormatting.RED)), false);
             return 0;
         }
 
@@ -434,64 +438,104 @@ public class ClaimCommand {
         return 1;
     }
 
-    private static int trust(CommandContext<CommandSourceStack> context, boolean owner) throws CommandSyntaxException {
-        ServerLevel world = context.getSource().getLevel();
-        ServerPlayer player = context.getSource().getPlayer();
+    private static int trust(CommandContext<CommandSourceStack> context, boolean owner, boolean all) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
         var toAddCol = GameProfileArgument.getGameProfiles(context, "player");
 
+        var claims = getManagedClaims(player, all);
+        if (claims.isEmpty()) {
+            return 0;
+        }
 
-        if (!world.isClientSide()) {
-            var skipChecks = ClaimUtils.isInAdminMode(player);
-            ClaimUtils.getClaimsAt(world, player.blockPosition()).forEach(claimedArea -> {
-                for (var toAdd : toAddCol) {
-                    if (skipChecks || claimedArea.getValue().isOwner(player)) {
-                        if (owner && !claimedArea.getValue().isOwner(toAdd.id())) {
-                            claimedArea.getValue().addOwner(toAdd.id());
-                            player.sendSystemMessage(prefix(Component.translatable("text.goml.command/owner_added", toAdd.name())), false);
-                        } else if (!owner && !claimedArea.getValue().getTrusted().contains(toAdd.id())) {
-                            claimedArea.getValue().trust(toAdd.id());
-                            player.sendSystemMessage(prefix(Component.translatable("text.goml.command/trusted", toAdd.name())), false);
-                        } else {
-                            player.sendSystemMessage(prefix(Component.translatable("text.goml.command/already_added", toAdd.name())), false);
-                        }
+        for (var toAdd : toAddCol) {
+            var changed = 0;
+            for (var claim : claims) {
+                if (owner && !claim.isOwner(toAdd.id())) {
+                    claim.addOwner(toAdd.id());
+                    player.sendSystemMessage(prefix(Component.translatable("text.goml.command.owner_added", toAdd.name())), false);
+                } else if (!owner && !claim.getTrusted().contains(toAdd.id())) {
+                    claim.trust(toAdd.id());
+                    changed++;
+                    if (!all) {
+                        player.sendSystemMessage(prefix(Component.translatable("text.goml.command.trusted", toAdd.name())), false);
                     }
+                } else if (!all) {
+                    player.sendSystemMessage(prefix(Component.translatable("text.goml.command.already_added", toAdd.name())), false);
                 }
-            });
+            }
+
+            if (all) {
+                player.sendSystemMessage(prefix(Component.translatable("text.goml.command.trusted_all", toAdd.name(), changed)), false);
+            }
         }
 
         return 1;
     }
 
-    private static int untrust(CommandContext<CommandSourceStack> context, boolean owner) throws CommandSyntaxException {
-        ServerLevel world = context.getSource().getLevel();
-        ServerPlayer player = context.getSource().getPlayer();
+    private static int untrust(CommandContext<CommandSourceStack> context, boolean owner, boolean all) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
         var toRemoveCol = GameProfileArgument.getGameProfiles(context, "player");
 
-        // Owner/trusted tried to remove themselves from the claim
+        var claims = getManagedClaims(player, all);
+        if (claims.isEmpty()) {
+            return 0;
+        }
 
-        ClaimUtils.getClaimsAt(world, player.blockPosition()).forEach(claimedArea -> {
-            for (var toRemove : toRemoveCol) {
+        for (var toRemove : toRemoveCol) {
+            // Owner/trusted tried to remove themselves from the claim
+            if (toRemove.id().equals(player.getUUID()) && !ClaimUtils.isInAdminMode(player)) {
+                player.sendSystemMessage(prefix(Component.translatable("text.goml.command.remove_self")), false);
+                continue;
+            }
 
-                if (toRemove.id().equals(player.getUUID()) && !ClaimUtils.isInAdminMode(player)) {
-                    player.sendSystemMessage(prefix(Component.translatable("text.goml.command/remove_self")), false);
-                    return;
+            var changed = 0;
+            for (var claim : claims) {
+                if (owner) {
+                    claim.getOwners().remove(toRemove.id());
+                } else if (claim.getTrusted().contains(toRemove.id())) {
+                    claim.untrust(toRemove.id());
+                    changed++;
                 }
 
-                if (claimedArea.getValue().isOwner(player)) {
-                    if (owner) {
-                        claimedArea.getValue().getOwners().remove(toRemove.id());
-                    } else {
-                        claimedArea.getValue().untrust(toRemove.id());
-                    }
-
-
-                    player.sendSystemMessage(prefix(Component.translatable("text.goml.command/" + (owner ? "owner_removed" : "untrusted"), toRemove.name())), false);
+                if (!all) {
+                    player.sendSystemMessage(prefix(Component.translatable("text.goml.command." + (owner ? "owner_removed" : "untrusted"), toRemove.name())), false);
                 }
             }
-        });
 
+            if (all) {
+                player.sendSystemMessage(prefix(Component.translatable("text.goml.command.untrusted_all", toRemove.name(), changed)), false);
+            }
+        }
 
         return 1;
+    }
+
+    /**
+     * Claims trust commands apply to: the claims at the player's position they own (or all of them in admin mode),
+     * or with "all", every claim they own in every dimension. Tells the player when there are none.
+     */
+    private static List<Claim> getManagedClaims(ServerPlayer player, boolean all) {
+        var claims = new ArrayList<Claim>();
+
+        if (all) {
+            for (var world : player.level().getServer().getAllLevels()) {
+                ClaimUtils.getClaimsOwnedBy(world, player.getUUID()).forEach(entry -> claims.add(entry.getValue()));
+            }
+        } else {
+            var skipChecks = ClaimUtils.isInAdminMode(player);
+            ClaimUtils.getClaimsAt(player.level(), player.blockPosition()).forEach(entry -> {
+                if (skipChecks || entry.getValue().isOwner(player)) {
+                    claims.add(entry.getValue());
+                }
+            });
+        }
+
+        if (claims.isEmpty()) {
+            player.sendSystemMessage(prefix(Component.translatable(all ? "text.goml.command.no_owned_claims" : "text.goml.command.not_in_owned_claim")
+                    .withStyle(ChatFormatting.RED)), false);
+        }
+
+        return claims;
     }
 
     private static int reload(CommandContext<CommandSourceStack> context) {
