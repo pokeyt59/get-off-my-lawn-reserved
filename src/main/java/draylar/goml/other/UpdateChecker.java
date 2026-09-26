@@ -56,7 +56,7 @@ import java.util.zip.ZipFile;
  * Checks this fork's GitHub releases for a newer build and tells the console and admins about it.
  * <p>
  * The "release" channel looks at normal releases (v1.2.3 tags), the "alpha" channel at the rolling "alpha" pre-release,
- * which the build workflow replaces with every pushed GitHub Actions build.
+ * which the build workflow replaces with every build of the main branch.
  * <p>
  * With autoUpdate on, a dedicated server also downloads the new jar next to the current one (verified against the
  * checksum GitHub lists for it) and swaps the jars once the server has stopped, so the update is used from the next start.
@@ -709,7 +709,7 @@ public final class UpdateChecker {
                 }
 
                 if (channel == Channel.ALPHA) {
-                    // The alpha is always the latest Actions build, version numbers don't matter
+                    // The alpha is always the latest main build, version numbers don't matter
                     return true;
                 }
             }
