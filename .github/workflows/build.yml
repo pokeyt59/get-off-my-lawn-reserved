@@ -153,11 +153,11 @@ jobs:
             run/crash-reports/
             run/.mixin.out/
           if-no-files-found: ignore
-      # every push to main that passes the startup test becomes the rolling "alpha" pre-release, so the latest build
-      # always has the same download page (and servers on the alpha update channel only get main's builds).
+      # every push to main or a claude/* branch that passes the startup test becomes the rolling "alpha" pre-release,
+      # so the latest build always has the same download page (and servers on the alpha update channel get it).
       # other branches still upload their jars as run artifacts
       - name: publish alpha
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/'))
         env:
           GH_TOKEN: ${{ github.token }}
           FULL_VERSION: ${{ steps.version.outputs.full }}

@@ -38,12 +38,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.concurrent.Executors;
@@ -56,7 +59,7 @@ import java.util.zip.ZipFile;
  * Checks this fork's GitHub releases for a newer build and tells the console and admins about it.
  * <p>
  * The "release" channel looks at normal releases (v1.2.3 tags), the "alpha" channel at the rolling "alpha" pre-release,
- * which the build workflow replaces with every build of the main branch.
+ * which the build workflow replaces with every build of the main and claude/* branches.
  * <p>
  * With autoUpdate on, a dedicated server also downloads the new jar next to the current one (verified against the
  * checksum GitHub lists for it) and swaps the jars once the server has stopped, so the update is used from the next start.
@@ -485,10 +488,21 @@ public final class UpdateChecker {
                 throw e;
             }
 
-            deleteOlderBackups(backup);
+            try {
+                // Backups are pruned by when they were replaced
+                Files.setLastModifiedTime(backup, FileTime.from(Instant.now()));
+            } catch (IOException e) {
+                // Only affects which backup is removed first
+            }
+            pruneBackups(backup, GetOffMyLawn.CONFIG.autoUpdateBackups);
 
-            GetOffMyLawn.LOGGER.info("Installed Get Off My Lawn {} as {}, it will be used from the next start. The previous jar was kept as {}",
-                    install.update.version, target.getFileName(), backup.getFileName());
+            if (Files.exists(backup)) {
+                GetOffMyLawn.LOGGER.info("Installed Get Off My Lawn {} as {}, it will be used from the next start. The previous jar was kept as {}",
+                        install.update.version, target.getFileName(), backup.getFileName());
+            } else {
+                GetOffMyLawn.LOGGER.info("Installed Get Off My Lawn {} as {}, it will be used from the next start. The previous jar was removed (autoUpdateBackups is 0)",
+                        install.update.version, target.getFileName());
+            }
         } catch (IOException e) {
             GetOffMyLawn.LOGGER.warn("Couldn't install Get Off My Lawn {}: {}. To update by hand, replace {} with {} (without the {} ending)",
                     install.update.version, e.toString(), CURRENT_JAR, install.file, DOWNLOAD_SUFFIX);
@@ -496,17 +510,42 @@ public final class UpdateChecker {
     }
 
     /**
-     * Keeps only one older version: removes other GOML backups, found by their content so renamed jars count too.
+     * Keeps the given number of older versions (all of them when negative), removing the ones replaced longest ago.
+     * Backups are found by their content, so renamed jars count too.
+     *
+     * @param newest the backup that was just made
      */
-    private static void deleteOlderBackups(Path keep) {
-        try (var files = Files.newDirectoryStream(keep.getParent(), "*.jar" + BACKUP_SUFFIX)) {
-            for (var file : files) {
-                if (!file.equals(keep) && isGomlJar(file)) {
-                    Files.deleteIfExists(file);
+    private static void pruneBackups(Path newest, int limit) {
+        if (limit < 0) {
+            return;
+        }
+
+        try {
+            var backups = new ArrayList<Path>();
+            try (var files = Files.newDirectoryStream(newest.getParent(), "*.jar" + BACKUP_SUFFIX)) {
+                for (var file : files) {
+                    if (file.equals(newest) || isGomlJar(file)) {
+                        backups.add(file);
+                    }
                 }
+            }
+
+            // The one just made first, then the most recently replaced
+            backups.sort(Comparator.comparing((Path file) -> !file.equals(newest))
+                    .thenComparing(UpdateChecker::lastModified, Comparator.reverseOrder()));
+            for (int i = limit; i < backups.size(); i++) {
+                Files.deleteIfExists(backups.get(i));
             }
         } catch (IOException e) {
             GetOffMyLawn.LOGGER.warn("Couldn't remove older Get Off My Lawn backups: {}", e.toString());
+        }
+    }
+
+    private static FileTime lastModified(Path file) {
+        try {
+            return Files.getLastModifiedTime(file);
+        } catch (IOException e) {
+            return FileTime.fromMillis(0);
         }
     }
 
@@ -709,7 +748,7 @@ public final class UpdateChecker {
                 }
 
                 if (channel == Channel.ALPHA) {
-                    // The alpha is always the latest main build, version numbers don't matter
+                    // The alpha is always the latest development build, version numbers don't matter
                     return true;
                 }
             }

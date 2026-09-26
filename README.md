@@ -100,9 +100,10 @@ You can find config file in `./config/getoffmylawn.json`. To reload it, just typ
   "placeholderClaimCantBuildInfo": "${owners} <gray>(<red>${anchor}</red>)",
   "claimColorSource": "location",       // either "location" or "player" - "location" will chose the color based on the location of the claim (hash of coordinates), "player" will chose the color based on the owner of the claim (hash of UUID).
   "checkForUpdates": true,              // Checks GitHub for a newer version and tells the console and admins (goml.update_notify permission, or level 3) about it. Nothing is downloaded.
-  "updateChannel": "release",           // either "release" (normal releases) or "alpha" (the latest build of the main branch)
+  "updateChannel": "release",           // either "release" (normal releases) or "alpha" (the latest development build, from the main and claude/* branches)
   "updateCheckIntervalHours": 12,       // How often to check again while the server runs, 0 to only check on startup
-  "autoUpdate": false                   // Dedicated servers only: download the new version (checked against GitHub's checksum) and install it when the server stops, so it's used from the next start. The previous jar is kept as <name>.jar.old in the mods folder, only the latest one. Needs checkForUpdates.
+  "autoUpdate": false,                  // Dedicated servers only: download the new version (checked against GitHub's checksum) and install it when the server stops, so it's used from the next start. The previous jar is kept as <name>.jar.old in the mods folder. Needs checkForUpdates.
+  "autoUpdateBackups": 1                // How many older versions autoUpdate keeps as .jar.old backups, 0 for none, -1 to keep all
 }
 ```
 
