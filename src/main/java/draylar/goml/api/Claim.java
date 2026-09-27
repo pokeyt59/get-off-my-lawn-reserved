@@ -451,9 +451,13 @@ public class Claim {
 
     @ApiStatus.Internal
     public void internal_decrementChunks() {
-        this.chunksLoadedCount--;
-        if (this.chunksLoadedCount == 0) {
-            this.clearTickedPlayers();
+        // internal_updateChunkCount doesn't see chunks already on their way out, their unload events can still follow.
+        // Below 0, chunks loading again would leave the count at 0 and augments wouldn't tick.
+        if (this.chunksLoadedCount > 0) {
+            this.chunksLoadedCount--;
+            if (this.chunksLoadedCount == 0) {
+                this.clearTickedPlayers();
+            }
         }
     }
 

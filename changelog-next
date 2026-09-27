@@ -27,4 +27,6 @@
 - Fixed GOML's default entity interaction tag never loading (it was in a misspelled folder), so anyone can ride minecarts and boats in claims again as intended. Breaking them is still protected.
 - Fixed explosions breaking blocks in claims when Lithium is installed (its faster explosion code added the blocks after GOML had already filtered them).
 - Augment effects (Chaos Zone, Lake Spirit's Grace, Heaven's Wings' Slow Falling) no longer run out during lag spikes on servers with TT20 or similar mods that catch up effect timers; they still update about once a second.
+- Fixed a claim's augments possibly stopping until a restart when its chunks were unloading while the claim was placed, upgraded or loaded (its loaded chunk count could drop below zero).
 - Every build is now tested before it's published: about 40 game tests on a real server (protection, fluids, pistons, dispensers, falling blocks, explosions, augments, commands, claim storage), the same tests next to popular performance and gameplay mods, and a Bedrock client joining through Geyser.
+- A report-only test also runs every build with the full mod list of a real server: the game tests, then a normal world with claims, Chunky pre-generation, BlueMap markers, a restart and a Bedrock player through Geyser and Floodgate.

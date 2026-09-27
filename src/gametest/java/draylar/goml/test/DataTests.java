@@ -177,6 +177,33 @@ public class DataTests {
         helper.succeed();
     }
 
+    /**
+     * Claims count their loaded chunks (augments only tick above 0): recounted from the loaded chunks when made or
+     * loaded, then kept up by chunk load and unload events. A chunk already on its way out isn't loaded for the
+     * recount but still sends its unload event afterwards, which must not push the count below 0: chunks loading again
+     * would then leave it at 0 and the claim's augments would stop working.
+     */
+    @GameTest
+    public void loadedChunkCountNeverGoesBelowZero(GameTestHelper helper) {
+        var claim = claim(helper, CENTER, 2, UUID.randomUUID());
+        try {
+            int loaded = claim.internal_getLoadedChunks();
+            check(helper, loaded > 0, "The claim's own chunk isn't counted as loaded");
+
+            // Unload events for all of them, and for two the recount didn't see
+            for (int i = 0; i < loaded + 2; i++) {
+                claim.internal_decrementChunks();
+            }
+            check(helper, claim.internal_getLoadedChunks() == 0, "Unload events took the loaded chunk count to " + claim.internal_getLoadedChunks());
+
+            claim.internal_incrementChunks();
+            check(helper, claim.internal_getLoadedChunks() == 1, "A chunk loading again counts " + claim.internal_getLoadedChunks() + " loaded chunks, not 1");
+        } finally {
+            remove(helper, claim);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void claimsSurviveSavingAndLoading(GameTestHelper helper) {
         var level = helper.getLevel();

@@ -719,6 +719,21 @@ def bluemap_claim_markers(expected, timeout):
     return counts
 
 
+def settled_check(server, timeout):
+    """"gomltest check" until it passes or the time is up. Right after chunks were generated, many are still on their
+    way out: no longer loaded, but their unload events (which the claims count) come a little later."""
+    started = time.time()
+    first = None
+    while True:
+        ok, answer = server.step("check")
+        if ok:
+            return True, answer + (f" (after {time.time() - started:.0f}s of chunks unloading, before: {first[:150]})" if first else "")
+        first = first or answer
+        if time.time() - started > timeout or not server.running():
+            return False, answer
+        time.sleep(5)
+
+
 def full_server(args):
     """A normal server with every mod of a real server's list: claims on generated terrain, Chunky pre-generation
     around them, BlueMap's claim markers, a restart, and the Bedrock bot through Geyser (+ Floodgate)."""
@@ -774,7 +789,7 @@ def full_server(args):
                 server.command("chunky cancel")
                 server.command("chunky confirm")
 
-        ok, answer = server.step("check")
+        ok, answer = settled_check(server, args.settle_timeout)
         record(ok, "Claims found and unchanged, loaded chunk counts right", answer)
 
         if grid and "bluemap" in installed:
@@ -790,7 +805,7 @@ def full_server(args):
 
         server = start("restart.log", "Server starts again")
         if server:
-            ok, answer = server.step("check")
+            ok, answer = settled_check(server, args.settle_timeout)
             record(ok, "Claims survive the restart", answer)
 
             if args.bedrock:
@@ -876,6 +891,7 @@ def main():
     server_parser.add_argument("--chunky-radius", type=int, default=192)
     server_parser.add_argument("--chunky-timeout", type=int, default=600)
     server_parser.add_argument("--bluemap-timeout", type=int, default=300)
+    server_parser.add_argument("--settle-timeout", type=int, default=120, help="seconds the claim check may wait for chunks to unload")
     server_parser.add_argument("--bedrock", action="store_true", help="run the Bedrock bot after the restart")
     server_parser.add_argument("--bot-timeout", type=int, default=330)
     server_parser.add_argument("--title", default="Full server")
