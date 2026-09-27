@@ -752,8 +752,12 @@ def full_server(args):
         if grid and "chunky" in installed:
             since = len(server.text())
             # Chunky Offline starts its own pre-generation around spawn while nobody is online, and Chunky runs one task
-            # per world: pause it, then replace it with ours (Chunky asks to confirm replacing a saved task)
-            for command in ("chunky pause", "chunky world minecraft:overworld", f"chunky center {grid.group(1)} {grid.group(2)}",
+            # per world: pause it (it stops once the chunks in progress are done), then replace it with ours (Chunky
+            # asks to confirm replacing a saved task)
+            server.command("chunky pause")
+            if server.wait_for(r"Task paused for minecraft:overworld", 10, since):
+                server.wait_for(r"Task stopped for minecraft:overworld", 180, since)
+            for command in ("chunky world minecraft:overworld", f"chunky center {grid.group(1)} {grid.group(2)}",
                             f"chunky radius {args.chunky_radius}", "chunky start", "chunky confirm"):
                 server.command(command)
                 time.sleep(2)
