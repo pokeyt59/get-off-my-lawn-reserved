@@ -751,20 +751,21 @@ def full_server(args):
 
         if grid and "chunky" in installed:
             since = len(server.text())
-            for command in ("chunky world minecraft:overworld", f"chunky center {grid.group(1)} {grid.group(2)}",
-                            f"chunky radius {args.chunky_radius}", "chunky start"):
+            # Chunky Offline starts its own pre-generation around spawn while nobody is online, and Chunky runs one task
+            # per world: pause it, then replace it with ours (Chunky asks to confirm replacing a saved task)
+            for command in ("chunky pause", "chunky world minecraft:overworld", f"chunky center {grid.group(1)} {grid.group(2)}",
+                            f"chunky radius {args.chunky_radius}", "chunky start", "chunky confirm"):
                 server.command(command)
-                time.sleep(1)
-            done = server.wait_for(r"Task (finished|stopped|cancelled) for \S+.*$", args.chunky_timeout, since)
-            if done and done.group(1) == "finished":
+                time.sleep(2)
+            done = server.wait_for(r"Task finished for minecraft:overworld.*$", args.chunky_timeout, since)
+            if done:
                 record(True, "Chunky pre-generates the area around the claims", done.group(0).strip()[:200])
             else:
                 # What Chunky (and mods controlling it) said, to see why
                 chunky_lines = [line.strip() for line in server.text()[since:].splitlines() if "chunky" in line.lower()]
-                log("Chunky's last messages:\n  " + "\n  ".join(chunky_lines[-20:]))
+                log("Chunky's first and last messages:\n  " + "\n  ".join(chunky_lines[:10] + ["..."] + chunky_lines[-10:]))
                 last = chunky_lines[-1] if chunky_lines else "no Chunky output"
-                record("warn", "Chunky pre-generates the area around the claims",
-                       (done.group(0).strip() if done else f"not done after {args.chunky_timeout}s") + f", last message: {last}")
+                record("warn", "Chunky pre-generates the area around the claims", f"not done after {args.chunky_timeout}s, last message: {last}")
                 # Chunky asks to confirm cancelling
                 server.command("chunky cancel")
                 server.command("chunky confirm")
@@ -864,7 +865,7 @@ def main():
     server_parser.add_argument("--xmx", default="6G", help="server heap")
     server_parser.add_argument("--timeout", type=int, default=900, help="seconds to wait for the server to start")
     server_parser.add_argument("--chunky-radius", type=int, default=192)
-    server_parser.add_argument("--chunky-timeout", type=int, default=900)
+    server_parser.add_argument("--chunky-timeout", type=int, default=600)
     server_parser.add_argument("--bluemap-timeout", type=int, default=300)
     server_parser.add_argument("--bedrock", action="store_true", help="run the Bedrock bot after the restart")
     server_parser.add_argument("--bot-timeout", type=int, default=330)
