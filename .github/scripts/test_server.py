@@ -208,6 +208,7 @@ view-distance=4
 simulation-distance=4
 max-tick-time=-1
 level-type=minecraft\\:flat
+generator-settings={"biome"\\:"minecraft\\:plains","layers"\\:[{"block"\\:"minecraft\\:bedrock","height"\\:1},{"block"\\:"minecraft\\:dirt","height"\\:2},{"block"\\:"minecraft\\:grass_block","height"\\:1}]}
 generate-structures=false
 spawn-monsters=false
 server-port=25565
@@ -283,8 +284,9 @@ def setup(args):
     (server / "config").mkdir(exist_ok=True)
     (server / "config" / "getoffmylawn.json").write_text(json.dumps(config, indent=2))
     if args.geyser:
-        (server / "config" / "geyser-fabric").mkdir(parents=True, exist_ok=True)
-        (server / "config" / "geyser-fabric" / "config.yml").write_text(GEYSER_CONFIG)
+        # Geyser-Fabric keeps its config in config/Geyser-Fabric
+        (server / "config" / "Geyser-Fabric").mkdir(parents=True, exist_ok=True)
+        (server / "config" / "Geyser-Fabric" / "config.yml").write_text(GEYSER_CONFIG)
 
     table = ["| Mod | Version | | Why |", "|---|---|---|---|"]
     table += [f"| {title} | {version} | {kind} | {reason} |" for title, version, kind, reason in mods.rows]
