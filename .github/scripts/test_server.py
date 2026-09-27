@@ -759,8 +759,15 @@ def full_server(args):
             if done and done.group(1) == "finished":
                 record(True, "Chunky pre-generates the area around the claims", done.group(0).strip()[:200])
             else:
-                record("warn", "Chunky pre-generates the area around the claims", done.group(0).strip()[:200] if done else f"not done after {args.chunky_timeout}s")
+                # What Chunky (and mods controlling it) said, to see why
+                chunky_lines = [line.strip() for line in server.text()[since:].splitlines() if "chunky" in line.lower()]
+                log("Chunky's last messages:\n  " + "\n  ".join(chunky_lines[-20:]))
+                last = chunky_lines[-1] if chunky_lines else "no Chunky output"
+                record("warn", "Chunky pre-generates the area around the claims",
+                       (done.group(0).strip() if done else f"not done after {args.chunky_timeout}s") + f", last message: {last}")
+                # Chunky asks to confirm cancelling
                 server.command("chunky cancel")
+                server.command("chunky confirm")
 
         ok, answer = server.step("check")
         record(ok, "Claims found and unchanged, loaded chunk counts right", answer)

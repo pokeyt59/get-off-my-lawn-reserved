@@ -418,8 +418,9 @@ jobs:
           else
             python3 .github/scripts/test_server.py server --dir server --bedrock --title "$TITLE"
           fi
+      # always, the job only reports and its warnings need the logs too
       - name: upload test server logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: full-${{ matrix.suite }}-test-logs
