@@ -3,10 +3,13 @@
 
 Each test job assembles a server from the jars the build job made, so no Gradle or compiling is needed there:
 
-  setup     Fabric server launcher, Fabric API, Polymer, the GOML and test mod jars, and optional extra mods or Geyser
+  setup     Fabric server launcher, Fabric API, Polymer, the GOML and test mod jars, and optional extra mods (at the
+            versions a mods file names) or Geyser
   gametest  runs GOML's game tests (src/gametest) on it and turns the JUnit report into the job summary
   boot      starts it normally, waits until it's up (and for expected log lines), checks the log and stops it
   bedrock   starts it with Geyser and runs the Bedrock bot (.github/bedrock-test/bot.mjs) against it
+  server    the full server test: a normal world with a real server's whole mod list (.github/server-mods.txt),
+            claims, Chunky pre-generation, BlueMap markers, a restart and the Bedrock bot
 
 Only the Python standard library is used. Downloads are cached in ~/.cache/goml-test-server by URL (only immutable
 URLs are used) and checked against the hashes Modrinth / GeyserMC publish.
@@ -67,6 +70,11 @@ def get_json(url, missing_ok=True):
                 return None
             if attempt == 3 or error.code < 500 and error.code != 429:
                 raise
+            if error.code == 429:
+                # Modrinth says how long until the rate limit resets
+                reset = error.headers.get("X-Ratelimit-Reset", "")
+                time.sleep(min(int(reset) + 1, 60) if reset.isdigit() else 2 ** (attempt + 1))
+                continue
         except (urllib.error.URLError, TimeoutError):
             if attempt == 3:
                 raise
@@ -123,32 +131,111 @@ def normalize(name):
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+def similar(title, name):
+    """Modrinth title vs the name in a mod list: the same, or a few letters more ("Cloth Config API" / "Cloth Config",
+    "Mineable Spawners" / "Mineable Spawner"), but "FerriteCore" isn't "Ferrite"
+    """
+    longer, shorter = sorted((normalize(title), normalize(name)), key=len, reverse=True)
+    return bool(shorter) and longer.startswith(shorter) and len(longer) - len(shorter) <= 3
+
+
+def primary_file(version):
+    files = version["files"]
+    return next((f for f in files if f.get("primary")), files[0])
+
+
+def pinned_version(versions, pin, minecraft):
+    """The Modrinth version matching the version a mod list shows (fabric.mod.json's, e.g. "0.25.2+mc26.2" for Lithium's
+    "mc26.2-0.25.2-fabric"): the exact version number, else the version inside the version number or file name, else
+    the part before "+" inside them. Numbers must not continue ("2.5" isn't "2.5.1" or "12.5"). Newest first, builds
+    for this Minecraft version before others."""
+    pin = pin.strip().lower()
+    if not pin:
+        return None
+
+    def contains(text):
+        return lambda version: any(text.search(value.lower()) for value in (version["version_number"], primary_file(version)["filename"]))
+
+    def bounded(text):
+        return re.compile(r"(?<![0-9.])" + re.escape(text) + r"(?![.]?[0-9])")
+
+    tests = [lambda version: version["version_number"].lower() == pin, contains(bounded(pin))]
+    core = pin.split("+", 1)[0]
+    if core != pin and re.search(r"[0-9]", core):
+        tests.append(contains(bounded(core)))
+    for test in tests:
+        matches = [version for version in versions if test(version)]
+        if matches:
+            return next((version for version in matches if minecraft in version["game_versions"]), matches[0])
+    return None
+
+
+class ModLine:
+    """A line of a mods file: "slug | Name | version | tags". Only the slug is needed; with the name Modrinth is
+    searched when the slug doesn't exist; with the version that version is used; a https:// URL instead of the slug is
+    downloaded as-is."""
+
+    def __init__(self, line):
+        parts = [part.strip() for part in line.split("|")]
+        self.slug = parts[0]
+        self.name = parts[1] if len(parts) > 1 and parts[1] else None
+        self.pin = parts[2] if len(parts) > 2 and parts[2] else None
+        self.tags = set(parts[3:])
+        self.url = self.slug if self.slug.startswith("https://") else None
+
+
+def read_mods_file(path):
+    lines = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip() if not line.lstrip().startswith("https://") else line.split(" #", 1)[0].strip()
+        if line:
+            lines.append(ModLine(line))
+    return lines
+
+
 class Mods:
     """Installs mods from Modrinth with their required dependencies, and remembers what it did for the summary."""
 
     def __init__(self, directory, minecraft):
         self.directory = directory
         self.minecraft = minecraft
-        self.installed = {}  # project id -> row
+        self.installed = {}  # project id -> version
         self.versions = {}  # project slug -> installed version number
+        self.projects = {}  # slug or id -> project, from prefetch
+        self.version_lists = {}  # project id -> its Fabric versions, newest first
+        self.pending = []  # (project id, needed by, required) dependencies still to install
         self.rows = []
         self.skipped = []
+        self.pinned = self.fallback = 0
 
-    def project(self, slug, name=None):
-        project = get_json(f"{MODRINTH}/project/{urllib.parse.quote(slug)}")
-        if project is None and name:
-            facets = json.dumps([["project_type:mod"]])
-            query = urllib.parse.urlencode({"query": name, "facets": facets, "limit": 10})
-            hits = (get_json(f"{MODRINTH}/search?{query}") or {}).get("hits", [])
-            for hit in hits:
-                if normalize(hit["title"]) == normalize(name):
-                    project = get_json(f"{MODRINTH}/project/{hit['project_id']}")
-                    break
-        return project
+    def prefetch(self, slugs):
+        """Looks up many projects in one request instead of one each"""
+        for chunk in range(0, len(slugs), 100):
+            ids = json.dumps(slugs[chunk:chunk + 100], separators=(",", ":"))
+            for project in get_json(f"{MODRINTH}/projects?ids={urllib.parse.quote(ids)}") or []:
+                self.projects[project["id"]] = self.projects[project["slug"]] = project
 
-    def version(self, project_id):
-        query = urllib.parse.urlencode({"loaders": json.dumps(["fabric"]), "game_versions": json.dumps([self.minecraft])})
-        versions = get_json(f"{MODRINTH}/project/{project_id}/version?{query}") or []
+    def project(self, slug):
+        if slug not in self.projects:
+            self.projects[slug] = get_json(f"{MODRINTH}/project/{urllib.parse.quote(slug)}")
+        return self.projects[slug]
+
+    def search(self, name):
+        facets = json.dumps([["project_type:mod"]])
+        query = urllib.parse.urlencode({"query": name, "facets": facets, "limit": 10})
+        hits = (get_json(f"{MODRINTH}/search?{query}") or {}).get("hits", [])
+        # Exact title matches first
+        hits.sort(key=lambda hit: normalize(hit["title"]) != normalize(name))
+        return [self.project(hit["project_id"]) for hit in hits[:3] if similar(hit["title"], name)]
+
+    def version_list(self, project_id):
+        if project_id not in self.version_lists:
+            query = urllib.parse.urlencode({"loaders": json.dumps(["fabric"])})
+            self.version_lists[project_id] = get_json(f"{MODRINTH}/project/{project_id}/version?{query}") or []
+        return self.version_lists[project_id]
+
+    def newest(self, project_id):
+        versions = [version for version in self.version_list(project_id) if self.minecraft in version["game_versions"]]
         # Newest release if there is one, otherwise the newest beta / alpha (like a server owner would pick)
         for kind in ("release", "beta", "alpha"):
             for version in versions:
@@ -156,28 +243,70 @@ class Mods:
                     return version
         return None
 
-    def install(self, slug, name=None, required=True, reason="requested"):
-        project = self.project(slug, name)
+    def resolve(self, slug, name, pin):
+        """(project, version, how) for a mod, the project is None when it isn't on Modrinth"""
+        project = self.project(slug)
+        candidates = [project] if project is not None else []
+        # A wrong slug can point at another mod: then the name decides
+        if name and (project is None or not similar(project["title"], name)
+                     or pin and not pinned_version(self.version_list(project["id"]), pin, self.minecraft)):
+            known = {candidate["id"] for candidate in candidates}
+            candidates += [found for found in self.search(name) if found and found["id"] not in known]
+            # Projects named like the mod before the slug's project
+            candidates.sort(key=lambda candidate: not similar(candidate["title"], name))
+        if pin:
+            for candidate in candidates:
+                version = pinned_version(self.version_list(candidate["id"]), pin, self.minecraft)
+                if version:
+                    return candidate, version, "your version"
+        for candidate in candidates:
+            version = self.newest(candidate["id"])
+            if version:
+                return candidate, version, f"newest, {pin} isn't on Modrinth" if pin else "newest"
+        return (candidates[0] if candidates else None), None, None
+
+    def install(self, slug, name=None, required=True, reason="requested", pin=None):
+        """Installs the mod now and queues its required dependencies for install_dependencies()"""
+        project, version, how = self.resolve(slug, name, pin)
         if project is None:
             return self.skip(slug, name, "not on Modrinth", required)
         if project["id"] in self.installed:
             return True
-        version = self.version(project["id"])
         if version is None:
             return self.skip(slug, project["title"], f"no Fabric build for {self.minecraft}", required)
 
-        files = version["files"]
-        file = next((f for f in files if f.get("primary")), files[0])
+        file = primary_file(version)
         download(file["url"], self.directory / file["filename"], {"sha512": file["hashes"].get("sha512"), "sha1": file["hashes"].get("sha1")})
-        self.installed[project["id"]] = True
+        self.installed[project["id"]] = version
         self.versions[project["slug"]] = version["version_number"]
-        self.rows.append((project["title"], version["version_number"], version["version_type"], reason))
-        log(f"  + {project['title']} {version['version_number']} ({reason})")
+        if pin:
+            if how == "your version":
+                self.pinned += 1
+            else:
+                self.fallback += 1
+        why = f"{reason}, {how}" if pin else reason
+        self.rows.append((project["title"], version["version_number"], version["version_type"], why))
+        log(f"  + {project['title']} {version['version_number']} ({why})")
 
         for dependency in version.get("dependencies", []):
-            if dependency.get("dependency_type") == "required" and dependency.get("project_id") and dependency["project_id"] not in self.installed:
-                self.install(dependency["project_id"], required=required, reason=f"needed by {project['title']}")
+            if dependency.get("dependency_type") == "required" and dependency.get("project_id"):
+                self.pending.append((dependency["project_id"], project["title"], required))
         return True
+
+    def install_dependencies(self):
+        """After the listed mods, so a dependency that's listed too gets the listed version"""
+        while self.pending:
+            project_id, needed_by, required = self.pending.pop(0)
+            if project_id not in self.installed:
+                self.install(project_id, required=required, reason=f"needed by {needed_by}")
+
+    def install_url(self, url, name, reason):
+        filename = urllib.parse.unquote(url.rsplit("/", 1)[-1].split("?", 1)[0])
+        if not filename.endswith(".jar"):
+            filename += ".jar"
+        download(url, self.directory / filename)
+        self.rows.append((name or filename, filename, "", f"{reason}, direct link"))
+        log(f"  + {filename} ({reason}, direct link)")
 
     def skip(self, slug, name, why, required):
         if required:
@@ -231,22 +360,42 @@ spawn-protection=0
 view-distance=4
 simulation-distance=4
 max-tick-time=-1
-level-type=minecraft\\:flat
-generator-settings={"biome"\\:"minecraft\\:plains","layers"\\:[{"block"\\:"minecraft\\:bedrock","height"\\:1},{"block"\\:"minecraft\\:dirt","height"\\:2},{"block"\\:"minecraft\\:grass_block","height"\\:1}]}
-generate-structures=false
 spawn-monsters=false
 server-port=25565
 motd=GOML test server
 """
 
+WORLDS = {
+    # Quick to create and nothing in the way of the tests
+    "flat": """\
+level-type=minecraft\\:flat
+generator-settings={"biome"\\:"minecraft\\:plains","layers"\\:[{"block"\\:"minecraft\\:bedrock","height"\\:1},{"block"\\:"minecraft\\:dirt","height"\\:2},{"block"\\:"minecraft\\:grass_block","height"\\:1}]}
+generate-structures=false
+""",
+    # A real world, so world generation mods run. No monsters, they'd attack the Bedrock bot.
+    "normal": """\
+level-seed=goml-full-server-test
+generate-structures=true
+difficulty=peaceful
+""",
+}
+
 GEYSER_CONFIG = """\
-# Written by .github/scripts/test_server.py: offline Bedrock logins, only for the CI test server
+# Written by .github/scripts/test_server.py: unauthenticated Bedrock logins, only for the CI test server
 config-version: 8
 java:
-  auth-type: offline
+  auth-type: {auth}
 advanced:
   bedrock:
     validate-bedrock-login: false
+"""
+
+# BlueMap only starts (and with it GOML's claim markers) once the Minecraft client download is accepted
+BLUEMAP_CORE_CONFIG = """\
+# Written by .github/scripts/test_server.py
+accept-download: true
+data: "bluemap"
+render-thread-count: 1
 """
 
 
@@ -269,8 +418,21 @@ def setup(args):
 
     mods = Mods(mods_dir, minecraft)
     mods.rows.append(("Fabric Loader", loader, "", "server"))
+    # Listed mods first, so the listed versions win over what GOML or other mods would pull in
+    if args.mods_file:
+        reason = Path(args.mods_file).name
+        lines = read_mods_file(args.mods_file)
+        mods.prefetch([line.slug for line in lines if not line.url])
+        for line in lines:
+            if args.gametest and "not-gametest" in line.tags:
+                mods.skipped.append((line.name or line.slug, "left out of the game test server"))
+            elif line.url:
+                mods.install_url(line.url, line.name, reason)
+            else:
+                mods.install(line.slug, line.name, required=False, reason=reason, pin=line.pin)
     for slug in ("fabric-api", "polymer"):
         mods.install(slug, reason="GOML dependency")
+    mods.install_dependencies()
     if args.gametest:
         # The Fabric API release jar leaves the game test runner out, dev environments get it from Maven
         url, filename, sha1, version = fabric_api_module(mods.versions["fabric-api"], "fabric-gametest-api-v1")
@@ -280,14 +442,6 @@ def setup(args):
     mods.add_file(Path(args.goml), "Get Off My Lawn ReServed", "built by this run")
     if args.test_jar:
         mods.add_file(Path(args.test_jar), "GOML tests", "built by this run")
-
-    if args.mods_file:
-        for line in Path(args.mods_file).read_text(encoding="utf-8").splitlines():
-            line = line.split("#", 1)[0].strip()
-            if not line:
-                continue
-            slug, _, name = (part.strip() for part in line.partition("|"))
-            mods.install(slug, name or None, required=False, reason="compat test")
 
     for project in ("geyser", "floodgate"):
         if not getattr(args, project):
@@ -303,37 +457,48 @@ def setup(args):
                 raise RuntimeError(f"No Geyser build for Fabric {minecraft}")
             # Floodgate often lags behind new Minecraft versions, that shouldn't block the tests
             reason = f"Floodgate has no Fabric build for {minecraft} yet"
+            if args.mods_file:
+                # Just one of many mods on this server
+                continue
             (server / "SKIPPED").write_text(reason)
             summary(f"### {args.title}: skipped, {reason}\n")
             log(f"::warning::{reason}, skipping the Floodgate check")
             return
+    mods.install_dependencies()
 
     (server / "eula.txt").write_text("eula=true\n")
-    (server / "server.properties").write_text(SERVER_PROPERTIES)
+    (server / "server.properties").write_text(SERVER_PROPERTIES + WORLDS[args.world])
     config = {"checkForUpdates": False, **json.loads(args.goml_config)}
     (server / "config").mkdir(exist_ok=True)
     (server / "config" / "getoffmylawn.json").write_text(json.dumps(config, indent=2))
     if args.geyser:
         # Geyser-Fabric keeps its config in config/Geyser-Fabric
         (server / "config" / "Geyser-Fabric").mkdir(parents=True, exist_ok=True)
-        (server / "config" / "Geyser-Fabric" / "config.yml").write_text(GEYSER_CONFIG)
+        (server / "config" / "Geyser-Fabric" / "config.yml").write_text(GEYSER_CONFIG.format(auth=args.geyser_auth))
+    if "bluemap" in mods.versions:
+        (server / "config" / "bluemap").mkdir(parents=True, exist_ok=True)
+        (server / "config" / "bluemap" / "core.conf").write_text(BLUEMAP_CORE_CONFIG)
+    # What the later commands can test on this server
+    (server / "installed.json").write_text(json.dumps(sorted(mods.versions) + [row[0].lower() for row in mods.rows if row[3] == "GeyserMC downloads"]))
 
     table = ["| Mod | Version | | Why |", "|---|---|---|---|"]
     table += [f"| {title} | {version} | {kind} | {reason} |" for title, version, kind, reason in mods.rows]
-    summary(f"### {args.title}: {len(mods.rows)} mods\n\n<details><summary>Mod list</summary>\n\n" + "\n".join(table) + "\n\n</details>\n")
+    pinned = f", {mods.pinned} at your version, {mods.fallback} at the newest because yours isn't on Modrinth" if mods.pinned or mods.fallback else ""
+    summary(f"### {args.title}: {len(mods.rows)} mods{pinned}\n\n<details><summary>Mod list</summary>\n\n" + "\n".join(table) + "\n\n</details>\n")
     if mods.skipped:
-        summary("Skipped (not available for this Minecraft version): " + ", ".join(f"{name} ({why})" for name, why in mods.skipped) + "\n")
+        summary(f"Skipped {len(mods.skipped)}: " + ", ".join(f"{name} ({why})" for name, why in mods.skipped) + "\n")
 
 
 class Server:
-    def __init__(self, directory, jvm_args=(), log_name="server.log"):
+    def __init__(self, directory, jvm_args=(), log_name="server.log", xmx="3G"):
         self.directory = Path(directory)
         self.jvm_args = list(jvm_args)
         self.log_path = self.directory / log_name
+        self.xmx = xmx
         self.process = None
 
     def start(self):
-        command = ["java", "-Xms1G", "-Xmx3G", *self.jvm_args, "-jar", "fabric-server-launch.jar", "nogui"]
+        command = ["java", "-Xms1G", f"-Xmx{self.xmx}", *self.jvm_args, "-jar", "fabric-server-launch.jar", "nogui"]
         log("$ " + " ".join(command))
         self.log_file = open(self.log_path, "w", encoding="utf-8")
         self.process = subprocess.Popen(command, cwd=self.directory, stdin=subprocess.PIPE, stdout=self.log_file,
@@ -345,15 +510,16 @@ class Server:
     def running(self):
         return self.process.poll() is None
 
-    def wait_for(self, pattern, timeout):
+    def wait_for(self, pattern, timeout, since=0):
+        """Waits for a log line matching pattern, only looking after the first `since` characters of the log"""
         regex = re.compile(pattern, re.M)
         deadline = time.time() + timeout
         while time.time() < deadline:
-            match = regex.search(self.text())
+            match = regex.search(self.text(), since)
             if match:
                 return match
             if not self.running():
-                return regex.search(self.text())
+                return regex.search(self.text(), since)
             time.sleep(0.5)
         return None
 
@@ -361,6 +527,15 @@ class Server:
         if self.running():
             self.process.stdin.write(line + "\n")
             self.process.stdin.flush()
+
+    def step(self, name, timeout=300):
+        """Runs "/gomltest <name>" (src/gametest/.../E2ECommands.java) on the console, returns (ok, answer)"""
+        since = len(self.text())
+        self.command(f"gomltest {name}")
+        match = self.wait_for(rf"\[gomltest\] {re.escape(name)} (ok|error)(.*)$", timeout, since)
+        if not match:
+            return False, "no answer"
+        return match.group(1) == "ok", match.group(2).strip()
 
     def wait_exit(self, timeout):
         try:
@@ -376,12 +551,15 @@ class Server:
         return self.wait_exit(timeout)
 
     def goml_errors(self):
-        errors = []
+        """(GOML errors, other mods' mixin errors): with many mods installed, a mixin error of another mod isn't GOML's"""
+        errors, others = [], []
         lines = self.text().splitlines()
         for number, line in enumerate(lines, 1):
-            if MIXIN_ERRORS.search(line) or GOML_ERROR_LINE.search(line) or (GOML_FRAME.search(line) and not TEST_FRAME.search(line)):
+            if GOML_ERROR_LINE.search(line) or (GOML_FRAME.search(line) and not TEST_FRAME.search(line)):
                 errors.append(f"{number}: {line.strip()}")
-        return errors
+            elif MIXIN_ERRORS.search(line):
+                (errors if "goml" in line.lower() else others).append(f"{self.log_path.name}:{number}: {line.strip()}")
+        return errors, others
 
 
 def fail(message, server=None):
@@ -393,7 +571,10 @@ def fail(message, server=None):
 
 
 def report_errors(server, title):
-    errors = server.goml_errors()
+    errors, others = server.goml_errors()
+    if others:
+        log(f"::warning::{len(others)} mixin errors of other mods in {server.log_path.name}, first: {others[0]}")
+        summary(f"**{title}: mixin errors of other mods** (not GOML's)\n\n```\n" + "\n".join(others[:20]) + "\n```\n")
     if errors:
         summary(f"**{title}: GOML errors in the server log**\n\n```\n" + "\n".join(errors[:40]) + "\n```\n")
         fail(f"{len(errors)} GOML error lines in the server log, first: {errors[0]}", server)
@@ -406,7 +587,7 @@ def gametest(args):
     jvm = ["-Dfabric-api.gametest", f"-Dfabric-api.gametest.report-file={report.resolve()}"]
     if args.filter:
         jvm.append(f"-Dfabric-api.gametest.filter={args.filter}")
-    server = Server(server_dir, jvm)
+    server = Server(server_dir, jvm, xmx=args.xmx)
     started = time.time()
     server.start()
     status = server.wait_exit(args.timeout)
@@ -463,6 +644,20 @@ def boot(args):
     log("Server started and stopped cleanly")
 
 
+def run_bot(directory, timeout):
+    """Runs the Bedrock bot (.github/bedrock-test/bot.mjs) against the server, returns (exit status, its checks)"""
+    bot_dir = ROOT / ".github" / "bedrock-test"
+    results = Path(directory).resolve() / "bedrock-results.json"
+    results.unlink(missing_ok=True)
+    env = dict(os.environ, BEDROCK_HOST="127.0.0.1", BEDROCK_PORT="19132", RESULTS_FILE=str(results))
+    try:
+        status = subprocess.run(["node", "bot.mjs"], cwd=bot_dir, env=env, timeout=timeout).returncode
+    except subprocess.TimeoutExpired:
+        status = None
+        log("::error::The Bedrock bot didn't finish in time")
+    return status, json.loads(results.read_text()) if results.exists() else []
+
+
 def bedrock(args):
     server = Server(args.dir, ["-Dgoml.e2e=true"])
     server.start()
@@ -476,19 +671,9 @@ def bedrock(args):
         server.stop(30)
         fail("GOML didn't enable Bedrock player detection with Geyser installed", server)
 
-    bot_dir = ROOT / ".github" / "bedrock-test"
-    results = Path(args.dir).resolve() / "bedrock-results.json"
-    results.unlink(missing_ok=True)
-    env = dict(os.environ, BEDROCK_HOST="127.0.0.1", BEDROCK_PORT="19132", RESULTS_FILE=str(results))
-    try:
-        bot = subprocess.run(["node", "bot.mjs"], cwd=bot_dir, env=env, timeout=args.bot_timeout)
-        bot_status = bot.returncode
-    except subprocess.TimeoutExpired:
-        bot_status = None
-        log("::error::The Bedrock bot didn't finish in time")
+    bot_status, steps = run_bot(args.dir, args.bot_timeout)
     server.stop()
 
-    steps = json.loads(results.read_text()) if results.exists() else []
     table = ["| | Check | Details |", "|---|---|---|"]
     for step in steps:
         table.append(f"| {'✅' if step['ok'] else '❌'} | {step['name']} | {str(step.get('details', '')).replace('|', '/')[:300]} |")
@@ -499,6 +684,125 @@ def bedrock(args):
     if bot_status != 0 or not steps or passed != len(steps):
         fail("The Bedrock end-to-end test failed", server)
     log("Bedrock end-to-end test passed")
+
+
+def bluemap_claim_markers(expected, timeout):
+    """GOML's claim markers per BlueMap map ({map id: count}), read from BlueMap's web server until a map has
+    `expected` of them or the time is up. None when the web server never answered."""
+    local = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def read(path):
+        with local.open(f"http://127.0.0.1:8100/{path}", timeout=10) as response:
+            return json.load(response)
+
+    counts = None
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            maps = read("settings.json").get("maps", [])
+            ids = list(maps) if isinstance(maps, dict) else [entry if isinstance(entry, str) else entry.get("id") for entry in maps]
+            counts = {}
+            for map_id in ids:
+                marker_set = read(f"maps/{urllib.parse.quote(str(map_id))}/live/markers.json").get("gomlMarkerSet") or {}
+                counts[map_id] = len(marker_set.get("markers") or {})
+            if expected in counts.values():
+                return counts
+        except (OSError, ValueError, AttributeError):
+            pass
+        time.sleep(5)
+    return counts
+
+
+def full_server(args):
+    """A normal server with every mod of a real server's list: claims on generated terrain, Chunky pre-generation
+    around them, BlueMap's claim markers, a restart, and the Bedrock bot through Geyser (+ Floodgate)."""
+    directory = Path(args.dir)
+    installed = set(json.loads((directory / "installed.json").read_text()))
+    rows = []
+    servers = []
+
+    def record(state, check, details=""):
+        rows.append((state, check, str(details)))
+        label = {True: "PASS", False: "FAIL", "warn": "WARN"}[state]
+        log(f"{label} {check}{' - ' + str(details) if details else ''}")
+
+    def start(log_name, check):
+        server = Server(directory, ["-Dgoml.e2e=true"], log_name=log_name, xmx=args.xmx)
+        servers.append(server)
+        started = time.time()
+        server.start()
+        done = server.wait_for(r"Done \(\d", args.timeout)
+        record(bool(done), check, f"in {time.time() - started:.0f}s" if done else "didn't finish starting")
+        if not done:
+            server.stop(30)
+        return server if done else None
+
+    server = start("server.log", "Server with all mods starts")
+    if server:
+        ok, answer = server.step("claims", 600)
+        record(ok, "Claim grid created on generated terrain", answer)
+        grid = re.search(r"center=(-?\d+),(-?\d+) claims=(\d+)", answer) if ok else None
+
+        if grid and "chunky" in installed:
+            since = len(server.text())
+            for command in ("chunky world minecraft:overworld", f"chunky center {grid.group(1)} {grid.group(2)}",
+                            f"chunky radius {args.chunky_radius}", "chunky start"):
+                server.command(command)
+                time.sleep(1)
+            done = server.wait_for(r"Task (finished|stopped|cancelled) for \S+.*$", args.chunky_timeout, since)
+            if done and done.group(1) == "finished":
+                record(True, "Chunky pre-generates the area around the claims", done.group(0).strip()[:200])
+            else:
+                record("warn", "Chunky pre-generates the area around the claims", done.group(0).strip()[:200] if done else f"not done after {args.chunky_timeout}s")
+                server.command("chunky cancel")
+
+        ok, answer = server.step("check")
+        record(ok, "Claims found and unchanged, loaded chunk counts right", answer)
+
+        if grid and "bluemap" in installed:
+            expected = int(grid.group(3))
+            counts = bluemap_claim_markers(expected, args.bluemap_timeout)
+            if counts is None:
+                record("warn", "BlueMap shows the claims", "BlueMap's web server didn't answer")
+            else:
+                record(expected in counts.values(), "BlueMap shows the claims", f"claim markers per map: {counts}, expected {expected} on one")
+
+        status = server.stop(180)
+        record(status == 0, "Server stops cleanly", f"exit status {status}")
+
+        server = start("restart.log", "Server starts again")
+        if server:
+            ok, answer = server.step("check")
+            record(ok, "Claims survive the restart", answer)
+
+            if args.bedrock:
+                detection = server.wait_for(r"Bedrock player detection enabled using (\S+)", 5)
+                api = "FloodgateApi" if "floodgate" in installed else "GeyserApi"
+                record(bool(detection) and api in detection.group(1), "Bedrock player detection", detection.group(1) if detection else "not enabled")
+                if not server.wait_for(r"Started Geyser on|geyser help", 60):
+                    log("::warning::Didn't see Geyser's startup message, trying anyway")
+                bot_status, steps = run_bot(directory, args.bot_timeout)
+                for step in steps:
+                    record(bool(step["ok"]), f"Bedrock: {step['name']}", step.get("details", ""))
+                if not steps or bot_status != 0 and all(step["ok"] for step in steps):
+                    record(False, "Bedrock bot", f"exit status {bot_status}, {len(steps)} checks")
+
+            status = server.stop(180)
+            record(status == 0, "Server stops cleanly after the test", f"exit status {status}")
+
+    icon = {True: "✅", False: "❌", "warn": "⚠️"}
+    table = ["| | Check | Details |", "|---|---|---|"]
+    table += [f"| {icon[state]} | {check} | {details.replace('|', '/').replace(chr(10), ' ')[:300]} |" for state, check, details in rows]
+    passed = sum(1 for row in rows if row[0] is True)
+    failed = [row for row in rows if row[0] is False]
+    warnings = sum(1 for row in rows if row[0] == "warn")
+    summary(f"### {args.title}: {passed}/{len(rows)} checks passed" + (f", {warnings} warnings" if warnings else "") + "\n\n" + "\n".join(table) + "\n")
+
+    for server in servers:
+        report_errors(server, args.title)
+    if failed:
+        fail(f"{len(failed)} checks failed, first: {failed[0][1]} ({failed[0][2][:200]})", servers[-1] if servers else None)
+    log("Full server test passed")
 
 
 def main():
@@ -514,6 +818,8 @@ def main():
     setup_parser.add_argument("--geyser", action="store_true")
     setup_parser.add_argument("--floodgate", action="store_true")
     setup_parser.add_argument("--goml-config", default="{}", help="JSON merged into config/getoffmylawn.json")
+    setup_parser.add_argument("--world", choices=sorted(WORLDS), default="flat")
+    setup_parser.add_argument("--geyser-auth", choices=("offline", "floodgate"), default="offline")
     setup_parser.add_argument("--title", default="Test server")
     setup_parser.set_defaults(run=setup)
 
@@ -521,6 +827,7 @@ def main():
     gametest_parser.add_argument("--dir", required=True)
     gametest_parser.add_argument("--filter")
     gametest_parser.add_argument("--timeout", type=int, default=900)
+    gametest_parser.add_argument("--xmx", default="3G", help="server heap")
     gametest_parser.add_argument("--title", default="Game tests")
     gametest_parser.set_defaults(run=gametest)
 
@@ -538,6 +845,18 @@ def main():
     bedrock_parser.add_argument("--bot-timeout", type=int, default=330)
     bedrock_parser.add_argument("--title", default="Bedrock (Geyser)")
     bedrock_parser.set_defaults(run=bedrock)
+
+    server_parser = commands.add_parser("server", help="the full server test, see full_server()")
+    server_parser.add_argument("--dir", required=True)
+    server_parser.add_argument("--xmx", default="6G", help="server heap")
+    server_parser.add_argument("--timeout", type=int, default=900, help="seconds to wait for the server to start")
+    server_parser.add_argument("--chunky-radius", type=int, default=192)
+    server_parser.add_argument("--chunky-timeout", type=int, default=900)
+    server_parser.add_argument("--bluemap-timeout", type=int, default=300)
+    server_parser.add_argument("--bedrock", action="store_true", help="run the Bedrock bot after the restart")
+    server_parser.add_argument("--bot-timeout", type=int, default=330)
+    server_parser.add_argument("--title", default="Full server")
+    server_parser.set_defaults(run=full_server)
 
     args = parser.parse_args()
     args.run(args)

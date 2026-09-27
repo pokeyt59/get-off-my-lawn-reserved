@@ -1,5 +1,6 @@
 # Builds the mod for every push and pull request, then tests the jars on separate test servers in parallel
 # (game tests, the same with other popular mods, a Bedrock client through Geyser) and only publishes when all pass.
+# A test with the full mod list of the server the alphas are installed on runs alongside, but only reports.
 
 name: build
 on:
@@ -331,7 +332,108 @@ jobs:
             server/config/
           if-no-files-found: ignore
 
-  # Publishes only when the build and every test job passed
+  # Report only, the alpha doesn't wait for it: the whole mod list of the server the alphas are installed on
+  # (.github/server-mods.txt, at that server's versions). The game tests with all of it, and a normal server with it:
+  # claims on generated terrain, Chunky pre-generation around them, BlueMap's claim markers, a restart, and a Bedrock
+  # player through Geyser + Floodgate.
+  full:
+    name: ${{ matrix.title }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: gametest
+            title: game tests with your server's mods
+          - suite: server
+            title: your server's mods with this build
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: setup node
+        if: matrix.suite == 'server'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      # also BlueMap's download of the Minecraft client (it needs it for its maps)
+      - name: cache test server downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/goml-test-server
+            server/libraries
+            server/versions
+            server/.fabric
+            server/server.jar
+            server/bluemap/*.jar
+          key: test-server-full-${{ matrix.suite }}-${{ steps.week.outputs.week }}-${{ hashFiles('gradle.properties', '.github/server-mods.txt', '.github/scripts/test_server.py') }}
+          restore-keys: test-server-full-${{ matrix.suite }}-
+      - name: download mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.jar }}
+          path: artifacts
+      - name: download test mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.test-jar }}
+          path: artifacts
+      - name: install bedrock client
+        if: matrix.suite == 'server'
+        working-directory: .github/bedrock-test
+        run: npm install --no-audit --no-fund
+      - name: set up test server
+        env:
+          JAR: artifacts/${{ needs.build.outputs.jar }}
+          TEST_JAR: artifacts/${{ needs.build.outputs.test-jar }}
+          TITLE: ${{ matrix.title }}
+          SUITE: ${{ matrix.suite }}
+          # the Bedrock bot checks the enter/leave action bar messages too
+          GOML_CONFIG: '{"claimEnterLeaveMessages": true}'
+        run: |
+          if [ "$SUITE" = gametest ]; then
+            python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --gametest --mods-file .github/server-mods.txt --title "$TITLE"
+          else
+            python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --mods-file .github/server-mods.txt \
+              --world normal --geyser --floodgate --geyser-auth floodgate --goml-config "$GOML_CONFIG" --title "$TITLE"
+          fi
+      - name: run the tests
+        env:
+          TITLE: ${{ matrix.title }}
+          SUITE: ${{ matrix.suite }}
+        run: |
+          if [ "$SUITE" = gametest ]; then
+            python3 .github/scripts/test_server.py gametest --dir server --xmx 6G --title "$TITLE"
+          else
+            python3 .github/scripts/test_server.py server --dir server --bedrock --title "$TITLE"
+          fi
+      - name: upload test server logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-${{ matrix.suite }}-test-logs
+          path: |
+            server/*.log
+            server/gametest-report.xml
+            server/bedrock-results.json
+            server/installed.json
+            server/logs/
+            server/crash-reports/
+            server/config/
+          if-no-files-found: ignore
+
+  # Publishes only when the build and every test job passed (the full mod list test above only reports)
   publish:
     needs: [build, startup, gametest, bedrock]
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release != '')

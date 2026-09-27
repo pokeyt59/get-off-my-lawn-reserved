@@ -1,5 +1,5 @@
 // Bedrock end-to-end test: joins the CI test server through Geyser as a Bedrock client (offline login) and checks what
-// GOML sends to Bedrock players. The server side is src/gametest/java/draylar/goml/test/BedrockE2E.java, driven with
+// GOML sends to Bedrock players. The server side is src/gametest/java/draylar/goml/test/E2ECommands.java, driven with
 // "/gomltest <step>" commands. Results go to $RESULTS_FILE, the exit code is 0 only when every check passed.
 import bedrock from 'bedrock-protocol'
 import { randomUUID } from 'node:crypto'

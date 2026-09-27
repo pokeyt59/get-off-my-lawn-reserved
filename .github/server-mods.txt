@@ -1,0 +1,101 @@
+# The full mod list of the server GOML's alphas are installed on, for the "your server's mods" test (report only,
+# the alpha doesn't wait for it). One mod per line:
+#
+#   slug | Name | version
+#
+# slug: the Modrinth project (modrinth.com/mod/<slug>). When it doesn't exist or is another mod, Modrinth is searched
+#       for the name.
+# version: what the server's mod list shows for the mod. That version is used when Modrinth has it (also when it's
+#       listed for another Minecraft version), otherwise the newest build for this Minecraft version.
+# A mod that isn't on Modrinth can be a direct download link instead: https://.../file.jar | Name
+# Add "| not-gametest" after the version to leave a mod out of the game test server (it still runs on the full server).
+# Mods Modrinth doesn't have for Fabric are listed as skipped in the job summary, required dependencies are added.
+# After updating the server's mods, update the versions here.
+# Floodgate 2.2.6-SNAPSHOT: newest build from GeyserMC (--geyser / --floodgate)
+# Geyser-Fabric 2.11.1-SNAPSHOT: newest build from GeyserMC (--geyser / --floodgate)
+# Get Off My Lawn ReServed 1.21.0+26.2: the jar this run built
+
+almanac | Almanac | 1.26.7.3
+anvil-restoration | Anvil Restoration | 2.5
+appleskin | AppleSkin | 3.0.10+mc26.2
+armored-elytra | Armored Elytra | 1.14.1
+axes-are-weapons | Axes Are Weapons | 1.10.2
+balm | Balm | 26.2.0.5
+biolith | Biolith | 3.6.0-alpha.9
+bluemap | BlueMap | 5.22
+bow-infinity-fix | Bow Infinity Fix | 3.3.0
+calcmod | CalcMod | 1.5.2+fabric.26.2
+clear-end-city | Clear End City | 1.0.0
+chunky | Chunky | 1.5.3
+climate-rivers | Climate Rivers | 26.2.0
+cloth-config | Cloth Config | 26.2.155
+collective | Collective | 8.39
+crafting-tweaks | Crafting Tweaks | 26.2.0.2
+craterlib | CraterLib | 3.1.2
+deeper-oceans | Deeper Oceans | 2.0.1
+despawning-eggs-hatch | Despawning Eggs Hatch | 4.5
+disableportalchecks | DisablePortalChecks | 1.0.0
+enhanced-netherite-armour | Enhanced Netherite Armour | 1.0.5
+fall-through-end | Fall Through End | 1.0.0
+fastback | FastBack | 0.34.0+26.2.0
+ferrite | Ferrite | 0.7.1-alpha+26.2
+ferrite-core | FerriteCore | 9.0.0
+followers-teleport-too | Followers Teleport Too | 2.8
+forge-config-api-port | Forge Config API Port | 26.2.1
+forgiving-void | Forgiving Void | 26.2.0.1
+formations | Formations | 1.0.4
+formations-nether | Formations Nether | 1.0.5+a
+get-it-together-drops | Get It Together, Drops! | 1.5.1
+giant-spawn | Giant Spawn | 5.3
+grabby-mobs | Grabby Mobs | 1.7
+hopo-better-mineshaft | Hopo Better Mineshaft | 1.3.7
+hopo-better-underwater-ruins | Hopo Better Underwater Ruins | 1.2.8
+inventory-sorter | Inventory Sorter | 3.0.0
+inventory-totem | Inventory Totem | 3.4
+invisible-frames | Invisible Frames | 2.0.1+26.2
+jade | Jade | 26.2.9+fabric
+jei | Just Enough Items | 30.15.0.98
+just-enough-resources-jer | Just Enough Resources | 1.11.0.41
+keep-my-soil-tilled | Keep My Soil Tilled | 2.6
+krypton | Krypton | 0.3.1
+letmedespawn | LetMeDespawn | 1.26.7.3
+lithium | Lithium | 0.25.2+mc26.2
+lithostitched | Lithostitched | 1.7.13
+moogs-end-structures | MoogsEndStructures | 2.0.3
+mineable-spawners | Mineable Spawner | 1-v2.3.9
+moogs-nether-structures | MoogsNetherStructures | 3.0.0
+modify-player-data | Modify Player Data | 0.4.2-26.2
+moogs-structure-lib | Moog's Structure Lib | 3.0.6+fabric
+ati-structures | ATi Structures | 1.4.5
+ati-structures-vanilla-edition | ATi Structures - Vanilla Edition | 1.4.5
+better-trees | Better Trees | 1.9.3
+chunky-offline | Chunky Offline | 1-v1.1.0
+dungeons-plus | Dungeons+ | 1.12.0
+ender-dragon-fight-remastered | Ender Dragon Fight Remastered | 5.0.2
+fortunate-ancient-debris | Fortunate Ancient Debris | 4.2
+norollback | NoRollback | 2.1
+slab-back | slab back | 1.9
+vanilla-refresh | Vanilla Refresh | 1.4.31
+mud-is-wet | Mud is Wet | 1.0.0
+netherportalfix | NetherPortalFix | 26.2.0.1
+placeholder-api | Placeholder API | 3.1.0-beta.1+26.2
+planting-dispensers | Planting Dispensers | 1.0.0+mc26.1.2
+polymer | Polymer | 0.17.3+26.2
+puzzles-lib | Puzzles Lib | 26.2.1
+roguelike-dungeons | Roguelike Dungeons | fabric-2.1.2+mc26.2
+scaffolding-drops-nearby | Scaffolding Drops Nearby | 3.5
+scalablelux | ScalableLux | 0.3.0-alpha.0.3+26.2
+server-backpacks | Server Backpacks | 1.6+26.1
+servercore | ServerCore | 1.5.19+26.2
+sgui | sgui | 2.1.0+26.2
+snowballs-freeze-mobs | Snowballs Freeze Mobs | 4.0
+spark | spark | 1.10.173
+terralith | Terralith | 2.6.4
+too-cheap | Too Cheap! | 1.4.1+mc26.2
+tt20 | TT20 | 0.8.4
+uncraftable-nether-wart-block | UncraftableNetherWartBlock | 1.0.0-Fabric-26.2
+viafabric | ViaFabric | 0.4.21+176-26.x
+viaversion | ViaVersion | 5.11.1-SNAPSHOT
+weaker-spiderwebs | Weaker Spiderwebs | 3.9
+welcome-message | Welcome Message | 2.8
+fast-noise | Fast Noise | 1.1.0-beta.4+26.2

@@ -457,6 +457,14 @@ public class Claim {
         }
     }
 
+    /**
+     * Loaded chunks overlapping this claim, as counted by chunk load/unload events. Augments only tick above 0.
+     */
+    @ApiStatus.Internal
+    public int internal_getLoadedChunks() {
+        return this.chunksLoadedCount;
+    }
+
     @ApiStatus.Internal
     public void internal_updateChunkCount(ServerLevel world) {
         // Recount from scratch, as resized/upgraded claims call this again

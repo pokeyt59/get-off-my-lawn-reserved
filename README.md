@@ -124,5 +124,17 @@ Every push is built once, then tested in parallel on separate test servers befor
 
 The alpha (and releases) only publish when all of these pass. Locally, `./gradlew runGameTest` runs the game tests.
 
+A **full mod list test** runs alongside them but only reports, so the alpha doesn't wait for it. It uses the whole mod
+list of the server the alphas are installed on (`.github/server-mods.txt`), at that server's versions where Modrinth
+has them. It runs the game tests with all of those mods, then a normal server with them:
+
+* claims on generated terrain;
+* Chunky pre-generation around those claims, after which each claim's loaded chunk count must still be right;
+* BlueMap's claim markers;
+* a restart, after which the claims must still be there;
+* a Bedrock player through Geyser and Floodgate.
+
+After updating the server's mods, update the versions in that file.
+
 ## License
 *Get Off My Lawn ReServed* is available under the MIT license. The project, code, and assets found in this repository are available for free public use (as long as credited).
