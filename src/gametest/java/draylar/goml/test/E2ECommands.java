@@ -99,7 +99,11 @@ final class E2ECommands {
     private static String runPlayerStep(ServerPlayer player, String step) {
         var level = player.level();
         return switch (step) {
-            case "detect" -> "bedrock=" + BedrockCompat.isBedrock(player);
+            // What GOML decided, and what each API says (to tell a Floodgate login from a plain Geyser one)
+            case "detect" -> "bedrock=" + BedrockCompat.isBedrock(player)
+                    + " floodgate=" + askApi("org.geysermc.floodgate.api.FloodgateApi", "getInstance", "isFloodgatePlayer", player.getUUID())
+                    + " geyser=" + askApi("org.geysermc.geyser.api.GeyserApi", "api", "isBedrockPlayer", player.getUUID())
+                    + " name=" + player.getScoreboardName();
             case "setup" -> {
                 cleanup(player);
                 player.setGameMode(GameType.SURVIVAL);
@@ -142,6 +146,18 @@ final class E2ECommands {
             }
             default -> throw new IllegalArgumentException("unknown step");
         };
+    }
+
+    private static String askApi(String className, String instanceGetter, String check, UUID uuid) {
+        try {
+            var clazz = Class.forName(className);
+            var instance = clazz.getMethod(instanceGetter).invoke(null);
+            return String.valueOf(clazz.getMethod(check, UUID.class).invoke(instance, uuid));
+        } catch (ClassNotFoundException e) {
+            return "absent";
+        } catch (Exception e) {
+            return "error:" + e.getClass().getSimpleName();
+        }
     }
 
     private static int gridX(int index) {

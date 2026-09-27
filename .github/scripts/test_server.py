@@ -802,6 +802,11 @@ def full_server(args):
                 bot_status, steps = run_bot(directory, args.bot_timeout)
                 for step in steps:
                     record(bool(step["ok"]), f"Bedrock: {step['name']}", step.get("details", ""))
+                if not steps or not all(step["ok"] for step in steps):
+                    # How Geyser and Floodgate handled the bot's login, from both starts
+                    for started in servers:
+                        lines = [line.strip() for line in started.text().splitlines() if re.search(r"(?i)floodgate|geyser|bedrockbot", line)]
+                        log(f"Geyser / Floodgate lines in {started.log_path.name}:\n  " + "\n  ".join(lines[:60]))
                 if not steps or bot_status != 0 and all(step["ok"] for step in steps):
                     record(False, "Bedrock bot", f"exit status {bot_status}, {len(steps)} checks")
 
