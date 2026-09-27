@@ -14,6 +14,7 @@
 # Floodgate 2.2.6-SNAPSHOT: newest build from GeyserMC (--geyser / --floodgate)
 # Geyser-Fabric 2.11.1-SNAPSHOT: newest build from GeyserMC (--geyser / --floodgate)
 # Get Off My Lawn ReServed 1.21.0+26.2: the jar this run built
+# sgui 2.1.0+26.2: not on Modrinth, it comes inside the mods that use it
 
 almanac | Almanac | 1.26.7.3
 anvil-restoration | Anvil Restoration | 2.5
@@ -58,12 +59,12 @@ jei | Just Enough Items | 30.15.0.98
 just-enough-resources-jer | Just Enough Resources | 1.11.0.41
 keep-my-soil-tilled | Keep My Soil Tilled | 2.6
 krypton | Krypton | 0.3.1
-letmedespawn | LetMeDespawn | 1.26.7.3
+let-me-despawn | LetMeDespawn | 1.26.7.3
 lithium | Lithium | 0.25.2+mc26.2
 lithostitched | Lithostitched | 1.7.13
-moogs-end-structures | MoogsEndStructures | 2.0.3
+mes-moogs-end-structures | MoogsEndStructures | 2.0.3
 mineable-spawners | Mineable Spawner | 1-v2.3.9
-moogs-nether-structures | MoogsNetherStructures | 3.0.0
+mns-moogs-nether-structures | MoogsNetherStructures | 3.0.0
 modify-player-data | Modify Player Data | 0.4.2-26.2
 moogs-structure-lib | Moog's Structure Lib | 3.0.6+fabric
 ati-structures | ATi Structures | 1.4.5
@@ -87,7 +88,6 @@ scaffolding-drops-nearby | Scaffolding Drops Nearby | 3.5
 scalablelux | ScalableLux | 0.3.0-alpha.0.3+26.2
 server-backpacks | Server Backpacks | 1.6+26.1
 servercore | ServerCore | 1.5.19+26.2
-sgui | sgui | 2.1.0+26.2
 snowballs-freeze-mobs | Snowballs Freeze Mobs | 4.0
 spark | spark | 1.10.173
 terralith | Terralith | 2.6.4

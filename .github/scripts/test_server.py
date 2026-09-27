@@ -133,10 +133,10 @@ def normalize(name):
 
 def similar(title, name):
     """Modrinth title vs the name in a mod list: the same, or a few letters more ("Cloth Config API" / "Cloth Config",
-    "Mineable Spawners" / "Mineable Spawner"), but "FerriteCore" isn't "Ferrite"
+    "MES - Moog's End Structures" / "MoogsEndStructures"), but "FerriteCore" isn't "Ferrite"
     """
     longer, shorter = sorted((normalize(title), normalize(name)), key=len, reverse=True)
-    return bool(shorter) and longer.startswith(shorter) and len(longer) - len(shorter) <= 3
+    return bool(shorter) and shorter in longer and len(longer) - len(shorter) <= 3
 
 
 def primary_file(version):
@@ -161,8 +161,10 @@ def pinned_version(versions, pin, minecraft):
 
     tests = [lambda version: version["version_number"].lower() == pin, contains(bounded(pin))]
     core = pin.split("+", 1)[0]
-    if core != pin and re.search(r"[0-9]", core):
-        tests.append(contains(bounded(core)))
+    # Some mod lists show a build prefix ("1-v2.3.9" for "v2.3.9+mod")
+    for text in dict.fromkeys((core, re.sub(r"^\d+-v", "", core))):
+        if text != pin and re.search(r"[0-9]\.[0-9]", text):
+            tests.append(contains(bounded(text)))
     for test in tests:
         matches = [version for version in versions if test(version)]
         if matches:
@@ -222,11 +224,15 @@ class Mods:
 
     def search(self, name):
         facets = json.dumps([["project_type:mod"]])
-        query = urllib.parse.urlencode({"query": name, "facets": facets, "limit": 10})
-        hits = (get_json(f"{MODRINTH}/search?{query}") or {}).get("hits", [])
+        hits = []
+        # Mod lists show some names without spaces ("LetMeDespawn"), Modrinth's search wants the words
+        for text in dict.fromkeys((name, re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name))):
+            query = urllib.parse.urlencode({"query": text, "facets": facets, "limit": 10})
+            hits += [hit for hit in (get_json(f"{MODRINTH}/search?{query}") or {}).get("hits", [])
+                     if similar(hit["title"], name) and hit["project_id"] not in {known["project_id"] for known in hits}]
         # Exact title matches first
         hits.sort(key=lambda hit: normalize(hit["title"]) != normalize(name))
-        return [self.project(hit["project_id"]) for hit in hits[:3] if similar(hit["title"], name)]
+        return [self.project(hit["project_id"]) for hit in hits[:3]]
 
     def version_list(self, project_id):
         if project_id not in self.version_lists:
