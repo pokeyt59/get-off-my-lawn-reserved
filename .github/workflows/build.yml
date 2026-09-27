@@ -238,7 +238,7 @@ jobs:
           TEST_JAR: artifacts/${{ needs.build.outputs.test-jar }}
           MODS: ${{ matrix.mods }}
           TITLE: ${{ matrix.title }}
-        run: python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --title "$TITLE" ${MODS:+--mods-file "$MODS"}
+        run: python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --gametest --title "$TITLE" ${MODS:+--mods-file "$MODS"}
       - name: run game tests
         env:
           TITLE: ${{ matrix.title }}

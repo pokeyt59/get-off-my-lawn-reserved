@@ -130,6 +130,7 @@ class Mods:
         self.directory = directory
         self.minecraft = minecraft
         self.installed = {}  # project id -> row
+        self.versions = {}  # project slug -> installed version number
         self.rows = []
         self.skipped = []
 
@@ -169,6 +170,7 @@ class Mods:
         file = next((f for f in files if f.get("primary")), files[0])
         download(file["url"], self.directory / file["filename"], {"sha512": file["hashes"].get("sha512"), "sha1": file["hashes"].get("sha1")})
         self.installed[project["id"]] = True
+        self.versions[project["slug"]] = version["version_number"]
         self.rows.append((project["title"], version["version_number"], version["version_type"], reason))
         log(f"  + {project['title']} {version['version_number']} ({reason})")
 
@@ -198,6 +200,28 @@ def geyser_download(project):
     file = build["downloads"]["fabric"]
     url = f"{GEYSER_DOWNLOADS}/{project}/versions/{build['version']}/builds/{build['build']}/downloads/fabric"
     return url, file["name"], file.get("sha256"), f"{build['version']} build {build['build']}"
+
+
+FABRIC_MAVEN = "https://maven.fabricmc.net/net/fabricmc/fabric-api"
+
+
+def fabric_api_module(fabric_api_version, module):
+    """Downloads info for a Fabric API module the release jar leaves out (the game test API is dev-only there),
+    with the version the Fabric API POM pins for it."""
+    pom_url = f"{FABRIC_MAVEN}/fabric-api/{fabric_api_version}/fabric-api-{fabric_api_version}.pom"
+    with urllib.request.urlopen(request(pom_url, "*/*"), timeout=60) as response:
+        pom = ElementTree.parse(response).getroot()
+    namespace = {"m": pom.tag.split("}")[0].strip("{")} if pom.tag.startswith("{") else {}
+    prefix = "m:" if namespace else ""
+    for dependency in pom.iter(f"{{{namespace['m']}}}dependency" if namespace else "dependency"):
+        artifact = dependency.find(f"{prefix}artifactId", namespace)
+        version = dependency.find(f"{prefix}version", namespace)
+        if artifact is not None and artifact.text == module and version is not None:
+            base = f"{FABRIC_MAVEN}/{module}/{version.text}/{module}-{version.text}.jar"
+            with urllib.request.urlopen(request(base + ".sha1", "*/*"), timeout=60) as response:
+                sha1 = response.read().decode().split()[0]
+            return base, f"{module}-{version.text}.jar", sha1, version.text
+    raise RuntimeError(f"{module} isn't in the Fabric API {fabric_api_version} POM")
 
 
 SERVER_PROPERTIES = """\
@@ -247,6 +271,12 @@ def setup(args):
     mods.rows.append(("Fabric Loader", loader, "", "server"))
     for slug in ("fabric-api", "polymer"):
         mods.install(slug, reason="GOML dependency")
+    if args.gametest:
+        # The Fabric API release jar leaves the game test runner out, dev environments get it from Maven
+        url, filename, sha1, version = fabric_api_module(mods.versions["fabric-api"], "fabric-gametest-api-v1")
+        download(url, mods_dir / filename, {"sha1": sha1})
+        mods.rows.append(("Fabric Game Test API", version, "", "runs the game tests"))
+        log(f"  + {filename}")
     mods.add_file(Path(args.goml), "Get Off My Lawn ReServed", "built by this run")
     if args.test_jar:
         mods.add_file(Path(args.test_jar), "GOML tests", "built by this run")
@@ -479,6 +509,7 @@ def main():
     setup_parser.add_argument("--dir", required=True)
     setup_parser.add_argument("--goml", required=True, help="the GOML jar to test")
     setup_parser.add_argument("--test-jar", help="the goml-test jar")
+    setup_parser.add_argument("--gametest", action="store_true", help="add Fabric's game test runner")
     setup_parser.add_argument("--mods-file", help="extra Modrinth mods, see .github/test-mods.txt")
     setup_parser.add_argument("--geyser", action="store_true")
     setup_parser.add_argument("--floodgate", action="store_true")
