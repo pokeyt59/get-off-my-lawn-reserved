@@ -4,7 +4,6 @@ import com.mojang.authlib.GameProfile;
 import io.netty.channel.ChannelFutureListener;
 import net.fabricmc.fabric.api.entity.FakePlayer;
 import net.fabricmc.fabric.impl.networking.UntrackedPacketListener;
-import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
@@ -47,7 +46,7 @@ public class RecordingPlayer extends FakePlayer {
     // Untracked like Fabric's own fake player listener, so no networking events fire for it
     private static final class Listener extends ServerGamePacketListenerImpl implements UntrackedPacketListener {
         private Listener(RecordingPlayer player) {
-            super(player.level().getServer(), new Connection(PacketFlow.CLIENTBOUND) {}, player, CommonListenerCookie.createInitial(player.getGameProfile(), false));
+            super(player.level().getServer(), new FakeConnection(), player, CommonListenerCookie.createInitial(player.getGameProfile(), false));
         }
 
         @Override
@@ -55,6 +54,13 @@ public class RecordingPlayer extends FakePlayer {
             if (this.player instanceof RecordingPlayer recorder) {
                 recorder.packets.add(packet);
             }
+        }
+    }
+
+    // Fully qualified: inside the listener, "Connection" means the inherited WaypointTransmitter.Connection
+    private static final class FakeConnection extends net.minecraft.network.Connection {
+        private FakeConnection() {
+            super(PacketFlow.CLIENTBOUND);
         }
     }
 }
