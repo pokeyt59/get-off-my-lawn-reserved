@@ -8,13 +8,14 @@ import net.minecraft.world.entity.LivingEntity;
 /**
  * Keeps an augment's effect on a player without sending an effect update every tick.
  * <p>
- * The effect lasts a bit over a second and is only refreshed when it's about to run out, so a player standing in the
- * claim gets about one update per second. Augments remove it when the player leaves, and only ever touch their own
+ * The effect lasts 5 seconds and is refreshed once it's down to 4, so a player standing in the claim gets about one
+ * update per second. The spare seconds keep it from running out during lag spikes, which mods like TT20 make up for by
+ * ticking effects several times at once. Augments remove it when the player leaves, and only ever touch their own
  * effect (ambient, no particles, level I, short), never potions or beacons.
  */
 public final class AugmentEffects {
-    static final int DURATION = 30;
-    static final int REFRESH_BELOW = 10;
+    static final int DURATION = 100;
+    static final int REFRESH_BELOW = 80;
 
     private AugmentEffects() {
     }

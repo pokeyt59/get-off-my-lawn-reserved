@@ -17,51 +17,62 @@ import static draylar.goml.test.GomlTestUtil.*;
  * Augments are called the way Claim#tick calls them for players inside, with players that record what they're sent.
  */
 public class AugmentTests {
-    @GameTest
+    // AugmentEffects.DURATION, the longest an augment's own effect lasts
+    private static final int AUGMENT_EFFECT_DURATION = 100;
+
+    /**
+     * 10 seconds in a Chaos Zone, one claim tick and one player tick per server tick like on a real server (so effect
+     * speed-ups like TT20's apply the way they would there), then the effect's edge cases.
+     */
+    @GameTest(maxTicks = 240)
     public void chaosZoneKeepsAShortEffectWithoutSpammingUpdates(GameTestHelper helper) {
         var owner = player(helper, "CzOwner");
         var visitor = player(helper, "CzVisitor");
         var claim = claim(helper, CENTER, 2, owner.getUUID());
         var chaosZone = (SelectiveClaimAugmentBlock) GOMLBlocks.CHAOS_ZONE.getFirst();
-        try {
-            claim.addAugment(helper.absolutePos(CENTER.east()), chaosZone);
-            chaosZone.onPlayerEnter(claim, visitor);
-            var updatesBefore = visitor.count(ClientboundUpdateMobEffectPacket.class);
+        claim.addAugment(helper.absolutePos(CENTER.east()), chaosZone);
+        chaosZone.onPlayerEnter(claim, visitor);
+        var updatesBefore = visitor.count(ClientboundUpdateMobEffectPacket.class);
+        var ticks = 200;
 
-            // 10 seconds in the claim
-            for (int tick = 0; tick < 200; tick++) {
+        for (int tick = 1; tick <= ticks; tick++) {
+            helper.runAtTickTime(tick, () -> {
                 chaosZone.playerTick(claim, visitor);
                 visitor.baseTick();
-            }
-
-            var strength = visitor.getEffect(MobEffects.STRENGTH);
-            check(helper, strength != null, "Chaos Zone didn't give Strength");
-            check(helper, strength.getDuration() <= 30 && strength.isAmbient() && !strength.isVisible(), "Chaos Zone's Strength isn't a short ambient effect: " + strength);
-            var updates = visitor.count(ClientboundUpdateMobEffectPacket.class) - updatesBefore;
-            // Refreshing it every tick sent 200 updates, about one a second is expected
-            check(helper, updates >= 1 && updates <= 15, "Chaos Zone sent " + updates + " effect updates in 200 ticks");
-
-            // An effect that's about to run out is refreshed
-            visitor.removeEffect(MobEffects.STRENGTH);
-            visitor.addEffect(new MobEffectInstance(MobEffects.STRENGTH, 5, 0, true, false, false));
-            chaosZone.playerTick(claim, visitor);
-            check(helper, visitor.getEffect(MobEffects.STRENGTH).getDuration() > 5, "Chaos Zone didn't refresh its effect before it ran out");
-
-            chaosZone.onPlayerExit(claim, visitor);
-            check(helper, !visitor.hasEffect(MobEffects.STRENGTH), "Chaos Zone's Strength stayed after leaving the claim");
-
-            // A potion is left alone, both while inside and when leaving
-            var potion = new MobEffectInstance(MobEffects.STRENGTH, 3600, 1);
-            visitor.addEffect(potion);
-            chaosZone.onPlayerEnter(claim, visitor);
-            chaosZone.playerTick(claim, visitor);
-            chaosZone.onPlayerExit(claim, visitor);
-            var after = visitor.getEffect(MobEffects.STRENGTH);
-            check(helper, after != null && after.getAmplifier() == 1 && after.getDuration() > 3000, "Chaos Zone changed or removed a Strength II potion: " + after);
-            helper.succeed();
-        } finally {
-            remove(helper, claim);
+            });
         }
+
+        helper.runAtTickTime(ticks + 1, () -> {
+            try {
+                var strength = visitor.getEffect(MobEffects.STRENGTH);
+                check(helper, strength != null, "Chaos Zone didn't keep Strength on the player");
+                check(helper, strength.getDuration() <= AUGMENT_EFFECT_DURATION && strength.isAmbient() && !strength.isVisible(), "Chaos Zone's Strength isn't a short ambient effect: " + strength);
+                var updates = visitor.count(ClientboundUpdateMobEffectPacket.class) - updatesBefore;
+                // Refreshing it every tick sent one update per tick, about one a second is expected
+                check(helper, updates >= 1 && updates <= 20, "Chaos Zone sent " + updates + " effect updates in " + ticks + " ticks");
+
+                // An effect that's about to run out is refreshed
+                visitor.removeEffect(MobEffects.STRENGTH);
+                visitor.addEffect(new MobEffectInstance(MobEffects.STRENGTH, 5, 0, true, false, false));
+                chaosZone.playerTick(claim, visitor);
+                check(helper, visitor.getEffect(MobEffects.STRENGTH).getDuration() > 5, "Chaos Zone didn't refresh its effect before it ran out");
+
+                chaosZone.onPlayerExit(claim, visitor);
+                check(helper, !visitor.hasEffect(MobEffects.STRENGTH), "Chaos Zone's Strength stayed after leaving the claim");
+
+                // A potion is left alone, both while inside and when leaving
+                var potion = new MobEffectInstance(MobEffects.STRENGTH, 3600, 1);
+                visitor.addEffect(potion);
+                chaosZone.onPlayerEnter(claim, visitor);
+                chaosZone.playerTick(claim, visitor);
+                chaosZone.onPlayerExit(claim, visitor);
+                var after = visitor.getEffect(MobEffects.STRENGTH);
+                check(helper, after != null && after.getAmplifier() == 1 && after.getDuration() > 3000, "Chaos Zone changed or removed a Strength II potion: " + after);
+                helper.succeed();
+            } finally {
+                remove(helper, claim);
+            }
+        });
     }
 
     @GameTest
