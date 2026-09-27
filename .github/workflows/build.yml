@@ -1,7 +1,5 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
+# Builds the mod for every push and pull request, then tests the jars on separate test servers in parallel
+# (game tests, the same with other popular mods, a Bedrock client through Geyser) and only publishes when all pass.
 
 name: build
 on:
@@ -20,11 +18,15 @@ permissions:
   contents: write
 
 jobs:
+  # Compiles, checks translations and makes the jars. Everything else starts from its jars, in parallel.
   build:
     runs-on: ubuntu-latest
-    # queued instead of cancelled, so a publish is never interrupted halfway
-    concurrency:
-      group: publish-${{ github.ref }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      full: ${{ steps.version.outputs.full }}
+      time: ${{ steps.version.outputs.time }}
+      jar: goml-${{ steps.version.outputs.full }}.jar
+      test-jar: goml-test-${{ steps.version.outputs.full }}.jar
     steps:
       - name: checkout repository
         uses: actions/checkout@v6
@@ -69,11 +71,14 @@ jobs:
           echo "full=$version+$minecraft" >> "$GITHUB_OUTPUT"
           # build time, the update checker compares it with when the alpha / release it finds was published
           echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: check translations
+        run: python3 .github/scripts/check_translations.py
+      # the game tests run on separate test servers below, not through gradle
       - name: build
         env:
           MOD_VERSION: ${{ steps.version.outputs.version }}
           BUILD_TIME: ${{ steps.version.outputs.time }}
-        run: ./gradlew build --stacktrace -Pmod_version="$MOD_VERSION" -Pbuild_commit="$GITHUB_SHA" -Pbuild_time="$BUILD_TIME"
+        run: ./gradlew build gametestJar -x runGameTest --stacktrace -Pmod_version="$MOD_VERSION" -Pbuild_commit="$GITHUB_SHA" -Pbuild_time="$BUILD_TIME"
       # uploaded as-is, so they download directly instead of inside a zip (artifacts are named after the files)
       - name: upload mod jar
         uses: actions/upload-artifact@v7
@@ -88,12 +93,35 @@ jobs:
         with:
           archive: false
           path: build/libs/*-sources.jar
-      # Boots a dev server (which also audits all mixins), waits for it to finish loading, then stops it
+      # the test mod, only for the test servers
+      - name: upload test mod jar
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: build/test-libs/*.jar
+
+  # Boots a dev server (which also audits all mixins), waits for it to finish loading, then stops it
+  startup:
+    name: dev server startup
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: setup gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
       - name: server startup test
         timeout-minutes: 10
         env:
-          MOD_VERSION: ${{ steps.version.outputs.version }}
-          BUILD_TIME: ${{ steps.version.outputs.time }}
+          MOD_VERSION: ${{ needs.build.outputs.version }}
+          BUILD_TIME: ${{ needs.build.outputs.time }}
         run: |
           mkdir -p run
           echo "eula=true" > run/eula.txt
@@ -146,49 +174,217 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: server-logs
+          name: startup-logs
           path: |
             server.log
             run/logs/
             run/crash-reports/
             run/.mixin.out/
           if-no-files-found: ignore
-      # every push to main or a claude/* branch that passes the startup test becomes the rolling "alpha" pre-release,
+
+  # GOML's game tests (src/gametest) on a standalone Fabric server made from the build's jars: protection, fluids,
+  # pistons, explosions, augments, commands, claim storage. The compat run repeats them next to other popular mods.
+  gametest:
+    name: ${{ matrix.title }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: goml
+            title: game tests
+            mods: ''
+          - suite: compat
+            title: game tests with other mods
+            mods: .github/test-mods.txt
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      # downloaded mods and the vanilla server, refreshed weekly so new mod versions get picked up
+      - name: cache test server downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/goml-test-server
+            server/libraries
+            server/versions
+            server/.fabric
+            server/server.jar
+          key: test-server-${{ matrix.suite }}-${{ steps.week.outputs.week }}-${{ hashFiles('gradle.properties', '.github/test-mods.txt', '.github/scripts/test_server.py') }}
+          restore-keys: test-server-${{ matrix.suite }}-
+      - name: download mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.jar }}
+          path: artifacts
+      - name: download test mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.test-jar }}
+          path: artifacts
+      - name: set up test server
+        env:
+          JAR: artifacts/${{ needs.build.outputs.jar }}
+          TEST_JAR: artifacts/${{ needs.build.outputs.test-jar }}
+          MODS: ${{ matrix.mods }}
+          TITLE: ${{ matrix.title }}
+        run: python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --title "$TITLE" ${MODS:+--mods-file "$MODS"}
+      - name: run game tests
+        env:
+          TITLE: ${{ matrix.title }}
+        run: python3 .github/scripts/test_server.py gametest --dir server --title "$TITLE"
+      - name: upload test server logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.suite }}-test-logs
+          path: |
+            server/*.log
+            server/gametest-report.xml
+            server/logs/
+            server/crash-reports/
+            server/config/
+          if-no-files-found: ignore
+
+  # A Bedrock client (.github/bedrock-test/bot.mjs) joins through Geyser and checks what GOML sends to Bedrock players,
+  # then a second boot checks GOML detects Bedrock players through Floodgate when it's installed
+  bedrock:
+    name: bedrock (geyser)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - name: cache test server downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/goml-test-server
+            server/libraries
+            server/versions
+            server/.fabric
+            server/server.jar
+          key: test-server-bedrock-${{ steps.week.outputs.week }}-${{ hashFiles('gradle.properties', '.github/scripts/test_server.py') }}
+          restore-keys: test-server-bedrock-
+      - name: download mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.jar }}
+          path: artifacts
+      - name: download test mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.test-jar }}
+          path: artifacts
+      - name: install bedrock client
+        working-directory: .github/bedrock-test
+        run: npm install --no-audit --no-fund
+      - name: set up test server with geyser
+        env:
+          JAR: artifacts/${{ needs.build.outputs.jar }}
+          TEST_JAR: artifacts/${{ needs.build.outputs.test-jar }}
+          # the bot checks the enter/leave action bar messages too
+          GOML_CONFIG: '{"claimEnterLeaveMessages": true}'
+        run: python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --geyser --goml-config "$GOML_CONFIG" --title "bedrock (geyser)"
+      - name: bedrock end-to-end test
+        run: python3 .github/scripts/test_server.py bedrock --dir server --title "bedrock (geyser)"
+      - name: set up test server with floodgate
+        env:
+          JAR: artifacts/${{ needs.build.outputs.jar }}
+          TEST_JAR: artifacts/${{ needs.build.outputs.test-jar }}
+        run: python3 .github/scripts/test_server.py setup --dir server --goml "$JAR" --test-jar "$TEST_JAR" --geyser --floodgate --title "floodgate detection"
+      - name: floodgate detection
+        run: python3 .github/scripts/test_server.py boot --dir server --log floodgate.log --title "floodgate detection" --expect 'Bedrock player detection enabled using org\.geysermc\.floodgate\.api\.FloodgateApi'
+      - name: upload test server logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bedrock-test-logs
+          path: |
+            server/*.log
+            server/bedrock-results.json
+            server/logs/
+            server/crash-reports/
+            server/config/
+          if-no-files-found: ignore
+
+  # Publishes only when the build and every test job passed
+  publish:
+    needs: [build, startup, gametest, bedrock]
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release != '')
+    runs-on: ubuntu-latest
+    # one alpha publish at a time (queued, never interrupted halfway), releases never wait on or replace each other
+    concurrency:
+      group: publish-${{ (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch') && github.run_id || 'alpha' }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      JAR: dist/${{ needs.build.outputs.jar }}
+      VERSION: ${{ needs.build.outputs.version }}
+      FULL_VERSION: ${{ needs.build.outputs.full }}
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: download mod jar
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.jar }}
+          path: dist
+      # every push to main or a claude/* branch that passes the tests becomes the rolling "alpha" pre-release,
       # so the latest build always has the same download page (and servers on the alpha update channel get it).
       # other branches still upload their jars as run artifacts
       - name: publish alpha
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/'))
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FULL_VERSION: ${{ steps.version.outputs.full }}
         run: |
-          jar=$(ls build/libs/*.jar | grep -v -e '-sources.jar$' -e '-dev.jar$')
+          # tests take different times, so an older run can finish last: never replace a newer alpha with it
+          published=$(gh release view alpha --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
+          if [ -n "$published" ] && [ "$published" != "$GITHUB_SHA" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$published...$GITHUB_SHA" --jq .status 2>/dev/null || echo unknown)
+            if [ "$status" = behind ]; then
+              echo "The alpha is already a newer commit ($published), keeping it"
+              exit 0
+            fi
+          fi
           gh release delete alpha --yes --cleanup-tag || true
-          gh release create alpha "$jar" --prerelease --target "$GITHUB_SHA" \
+          gh release create alpha "$JAR" --prerelease --target "$GITHUB_SHA" \
             --title "alpha $FULL_VERSION (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" \
-            --notes "Automatic build of ${GITHUB_REF_NAME}@${GITHUB_SHA}. Unstable, use at your own risk."
+            --notes "Automatic build of ${GITHUB_REF_NAME}@${GITHUB_SHA}, passed the game tests and the Bedrock test. Unstable, use at your own risk."
       # pushing a tag like v1.21.1 publishes a normal release
       - name: publish release
         if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FULL_VERSION: ${{ steps.version.outputs.full }}
         run: |
-          jar=$(ls build/libs/*.jar | grep -v -e '-sources.jar$' -e '-dev.jar$')
           # pending notes in changelog-next are the release text, github's generated notes if it's empty
           if [ -s changelog-next ]; then notes=(--notes-file changelog-next); else notes=(--generate-notes); fi
-          gh release create "$GITHUB_REF_NAME" "$jar" --verify-tag \
+          gh release create "$GITHUB_REF_NAME" "$JAR" --verify-tag \
             --title "Get Off My Lawn ReServed $FULL_VERSION" "${notes[@]}"
       # the Actions tab release button: tags the built commit and publishes the release in one go
       - name: publish release (manual)
         if: github.event_name == 'workflow_dispatch' && inputs.release != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-          FULL_VERSION: ${{ steps.version.outputs.full }}
         run: |
-          jar=$(ls build/libs/*.jar | grep -v -e '-sources.jar$' -e '-dev.jar$')
           # pending notes in changelog-next are the release text, github's generated notes if it's empty
           if [ -s changelog-next ]; then notes=(--notes-file changelog-next); else notes=(--generate-notes); fi
-          gh release create "v$VERSION" "$jar" --target "$GITHUB_SHA" \
+          gh release create "v$VERSION" "$JAR" --target "$GITHUB_SHA" \
             --title "Get Off My Lawn ReServed $FULL_VERSION" "${notes[@]}"

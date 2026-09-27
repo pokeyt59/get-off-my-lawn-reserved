@@ -23,3 +23,6 @@
 - "This block is protected by Steve's claim!": protection messages now name the claim's owner, also for buckets.
 - `/goml trust <player> all` and `/goml untrust <player> all` apply to all your claims; trust commands tell you when you aren't standing in a claim you own.
 - `/goml list` shows your claims from every dimension.
+- Fixed augments, the force field, `/goml escape` and web map markers treating the block right outside a claim's east/south/top edge as inside it (the player-detection box was one block too big).
+- Fixed GOML's default entity interaction tag never loading (it was in a misspelled folder), so anyone can ride minecarts and boats in claims again as intended. Breaking them is still protected.
+- Every build is now tested before it's published: about 40 game tests on a real server (protection, fluids, pistons, dispensers, falling blocks, explosions, augments, commands, claim storage), the same tests next to popular performance and gameplay mods, and a Bedrock client joining through Geyser.

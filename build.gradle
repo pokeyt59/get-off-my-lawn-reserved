@@ -17,6 +17,16 @@ loom {
 	accessWidenerPath = file("src/main/resources/goml.accesswidener")
 }
 
+// Game tests live in src/gametest as a separate "goml-test" mod. CI runs them on a standalone server built from the
+// jars (see .github/workflows/build.yml), locally "./gradlew runGameTest" does the same in the dev environment.
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "goml-test"
+		enableClientGameTests = false
+	}
+}
+
 repositories {
 	maven { url = "https://maven.fabricmc.net/" }
 	maven { url = "https://maven.nucleoid.xyz/" }
@@ -105,6 +115,21 @@ processResources {
 	filesMatching('fabric.mod.json') {
 		expand "version": project.version, "build_commit": buildCommit, "build_time": buildTime
 	}
+}
+
+processGametestResources {
+	inputs.property "version", project.version
+
+	filesMatching('fabric.mod.json') {
+		expand "version": project.version
+	}
+}
+
+// The test mod as a jar for the CI test servers, never published
+tasks.register("gametestJar", Jar) {
+	from sourceSets.gametest.output
+	archiveBaseName = "goml-test"
+	destinationDirectory = layout.buildDirectory.dir("test-libs")
 }
 
 // ensure that the encoding is set to UTF-8, no matter what the system default is

@@ -18,11 +18,12 @@ public record ClaimBox(com.jamieswhiteshirt.rtree3i.Box rtree3iBox, AABB minecra
     }
 
     public ClaimBox(BlockPos origin, int radius, int radiusY, boolean noShift) {
-        this(
-                noShift ? createBoxNoShift(origin, radius, radiusY) : createBox(origin, radius, radiusY),
-                AABB.encapsulatingFullBlocks(origin.offset(-radius, -radiusY, -radius), noShift ? origin.offset(radius, radiusY, radius) : origin.offset(radius + 1, radiusY + 1, radius + 1)),
-                origin, radius, radiusY, noShift
-        );
+        this(noShift ? createBoxNoShift(origin, radius, radiusY) : createBox(origin, radius, radiusY), origin, radius, radiusY, noShift);
+    }
+
+    private ClaimBox(com.jamieswhiteshirt.rtree3i.Box box, BlockPos origin, int radius, int radiusY, boolean noShift) {
+        // Exactly the protected blocks, so players next to the claim don't count as inside it (augments, force field, maps)
+        this(box, new AABB(box.x1(), box.y1(), box.z1(), box.x2(), box.y2(), box.z2()), origin, radius, radiusY, noShift);
     }
 
     private static com.jamieswhiteshirt.rtree3i.Box createBox(BlockPos origin, int radius, int radiusY) {

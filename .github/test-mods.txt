@@ -1,0 +1,21 @@
+# Extra mods for the "compat" test server, the same kind of mods GOML runs next to on real servers.
+# One Modrinth slug per line, "slug | Name" searches Modrinth by name when the slug doesn't exist.
+# Mods without a Fabric build for this Minecraft version are listed as skipped in the job summary, not failed.
+# Their required dependencies are added automatically.
+
+# Performance (they replace vanilla code GOML hooks into: explosions, fluids, pistons, entity ticking)
+lithium | Lithium
+servercore | ServerCore
+ferrite-core | FerriteCore
+krypton | Krypton
+scalablelux | ScalableLux
+tt20 | TT20
+
+# Gameplay that changes how players and machines interact with blocks and entities
+planting-dispensers | Planting Dispensers
+mineable-spawners | Mineable Spawners
+keep-my-soil-tilled | Keep My Soil Tilled
+snowballs-freeze-mobs | Snowballs Freeze Mobs
+invisible-frames | Invisible Frames
+grabby-mobs | Grabby Mobs
+axes-are-weapons | Axes Are Weapons

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "goml-test",
+  "version": "${version}",
+  "name": "Get Off My Lawn ReServed tests",
+  "description": "Game tests and the Bedrock end-to-end helper for GOML. Only for test servers, never install it on a real one.",
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "draylar.goml.test.GomlTestMod"
+    ],
+    "fabric-gametest": [
+      "draylar.goml.test.ProtectionTests",
+      "draylar.goml.test.WorldTests",
+      "draylar.goml.test.AugmentTests",
+      "draylar.goml.test.CommandTests",
+      "draylar.goml.test.DataTests",
+      "draylar.goml.other.ClaimMessagesTests"
+    ]
+  },
+  "depends": {
+    "goml": "*",
+    "fabric-api": "*"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "goml-bedrock-test",
+  "private": true,
+  "description": "Bedrock client that joins the CI test server through Geyser and checks what GOML sends to Bedrock players",
+  "type": "module",
+  "scripts": {
+    "test": "node bot.mjs"
+  },
+  "dependencies": {
+    "bedrock-protocol": "3.60.1"
+  }
+}

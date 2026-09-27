@@ -42,3 +42,10 @@ run/
 /run2/config/modmenu.json
 /run2/options.txt
 /run2/servers.dat
+
+# Python
+__pycache__/
+
+# Bedrock test client
+.github/bedrock-test/node_modules/
+.github/bedrock-test/package-lock.json

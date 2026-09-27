@@ -109,5 +109,20 @@ You can find config file in `./config/getoffmylawn.json`. To reload it, just typ
 ```
 
 
+## Testing
+
+Every push is built once, then tested in parallel on separate test servers before anything is published
+(`.github/workflows/build.yml`):
+
+* **Game tests** (`src/gametest`): a standalone Fabric server with the built jar runs GOML's game tests. Fake players
+  break, use and attack things in claims. The tests also cover fluids, pistons, dispensers, falling blocks,
+  explosions, augments, `/goml` commands (including every message's translation) and claim storage.
+* **Compat**: the same tests next to the performance and gameplay mods listed in `.github/test-mods.txt`.
+* **Bedrock**: a Bedrock client (`.github/bedrock-test`) joins through Geyser. It checks that GOML detects it, that
+  protection and enter/leave messages arrive translated, that goggles draw particles, that Chaos Zone doesn't spam
+  effect updates, and that menus open. A second boot checks detection through Floodgate.
+
+The alpha (and releases) only publish when all of these pass. Locally, `./gradlew runGameTest` runs the game tests.
+
 ## License
 *Get Off My Lawn ReServed* is available under the MIT license. The project, code, and assets found in this repository are available for free public use (as long as credited).
