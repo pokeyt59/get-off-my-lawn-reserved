@@ -19,7 +19,7 @@ public abstract class FarmBlockMixin extends Block {
         super(settings);
     }
 
-    @Inject(method = "turnToDirt", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "turnToBaseBlock", at = @At("HEAD"), cancellable = true)
     private static void goml$protectFarmland(Entity entity, BlockState state, Level world, BlockPos pos, CallbackInfo ci) {
         if (world.isClientSide()) {
             return;

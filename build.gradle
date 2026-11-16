@@ -2,8 +2,8 @@
 plugins {
 	id 'net.fabricmc.fabric-loom' version '1.15.+'
 	id 'maven-publish'
-	id "com.modrinth.minotaur" version "2.+"
-	id 'com.matthewprenger.cursegradle' version '1.4.0'
+	id "me.modmuss50.mod-publish-plugin" version "2.2.0"
+
 }
 
 base {
@@ -169,56 +169,44 @@ publishing {
 }
 
 
-curseforge {
+publishMods {
+	changelog = System.getenv("CHANGELOG")
+	type = project.mod_version.contains("-") ? BETA : STABLE
+	file = jar.archiveFile
+	modLoaders.add("fabric")
+
 	if (System.getenv("CURSEFORGE")) {
-		apiKey = System.getenv("CURSEFORGE")
+		curseforge {
+			projectId = "572651"
+			accessToken = System.getenv("CURSEFORGE")
+			client = true
+			server = true
 
-		project {
-			id = "572651"
-			releaseType = "release"
-			changelog = System.getenv("CHANGELOG")
-			changelogType = "markdown"
-			addGameVersion((project.minecraft_version.contains("-") ? ((String) project.minecraft_version.split("-")[0] + "-snapshot") : project.minecraft_version))
-			addGameVersion "Fabric"
-			relations {
-				requiredDependency 'polymer'
+			minecraftVersions.add((project.minecraft_version.contains("-") ? ((String) project.minecraft_version.split("-")[0] + "-snapshot") : project.minecraft_version))
+			for (String a : project.mc_extra_supported.split(",")) {
+				if (!a.strip().isEmpty()) {
+					minecraftVersions.add(a.strip())
+				}
 			}
-			mainArtifact(jar.archiveFile)
 
-			afterEvaluate {
-				uploadTask.dependsOn("jar")
-			}
-		}
-
-		jar {
-			finalizedBy project.tasks.curseforge
+			requires("polymer")
 		}
 	}
 
-	options {
-		forgeGradleIntegration = false
+	if (System.getenv("MODRINTH")) {
+		modrinth {
+			accessToken = System.getenv("MODRINTH")
+			projectId = 'j5niDupl'
+
+			minecraftVersions.add(project.minecraft_version);
+			for (String a : project.mc_extra_supported.split(",")) {
+				if (!a.strip().isEmpty()) {
+					minecraftVersions.add(a.strip())
+				}
+			}
+
+			requires("polymer")
+		}
 	}
-
-
 }
 
-if (System.getenv("MODRINTH")) {
-	modrinth {
-		token = System.getenv("MODRINTH")
-		projectId = 'j5niDupl'
-		versionNumber = "" + version
-
-		changelog = System.getenv("CHANGELOG")
-		// On fabric, use 'jar' instead of 'jar'
-		uploadFile = jar
-		gameVersions = [((String) project.minecraft_version)]
-		dependencies {
-			required.project "polymer"
-		}
-		loaders = ["fabric"]
-	}
-
-	jar {
-		finalizedBy project.tasks.modrinth
-	}
-}

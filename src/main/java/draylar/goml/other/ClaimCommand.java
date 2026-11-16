@@ -35,6 +35,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
@@ -203,7 +204,7 @@ public class ClaimCommand {
                     y = player.level().getHeight(Heightmap.Types.MOTION_BLOCKING, (int) pos.x, (int) pos.z);
                 }
 
-                player.randomTeleport(pos.x, y, pos.z, true);
+                player.randomTeleport(pos.x, y, pos.z, true, BlockTags.DANGEROUS_FOR_TELEPORTATION);
 
                 player.setDeltaMovement(Vec3.atLowerCornerOf(dir.getUnitVec3i()).scale(0.2));
 
