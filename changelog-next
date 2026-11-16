@@ -1,3 +1,4 @@
+- Updated to Minecraft 26.3 (upstream's 1.22.0). It needs Minecraft 26.3 or newer, servers on 26.2 stay on the 1.21 builds and aren't offered this one by the update checker.
 - Improved performance of chunk loading/unloading, claim ticking, explosions and protection checks.
 - Fixed fluids being able to flow into a claim from a different claim next to it.
 - Fixed resized/upgraded claims counting loaded chunks twice, which kept their augments ticking after chunks unloaded.

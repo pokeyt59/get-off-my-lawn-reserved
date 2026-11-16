@@ -756,7 +756,7 @@ public final class UpdateChecker {
     }
 
     /**
-     * @param minecraft the Minecraft version this jar is built for (the "+26.2" part of the version)
+     * @param minecraft the Minecraft version this jar is built for (the "+26.3" part of the version)
      * @param commit    git commit this jar was built from, null for local builds
      * @param time      when this jar was built, null for local builds
      */

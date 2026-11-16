@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Version to release, e.g. 1.21.1 (creates tag v1.21.1). Leave empty for a plain build.'
+        description: 'Version to release, e.g. 1.22.1 (creates tag v1.22.1). Leave empty for a plain build.'
         required: false
         default: ''
 
@@ -43,8 +43,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
-      # releases and tags build as their own version (v1.21.1 -> 1.21.1), everything else gets the patch number set to the
-      # count of commits since mod_version last changed in gradle.properties (1.21.0 -> 1.21.1 -> 1.21.2 ...).
+      # releases and tags build as their own version (v1.22.1 -> 1.22.1), everything else gets the patch number set to the
+      # count of commits since mod_version last changed in gradle.properties (1.22.0 -> 1.22.1 -> 1.22.2 ...).
       # build.gradle adds the "+<minecraft version>" part.
       - name: compute version
         id: version
@@ -475,7 +475,7 @@ jobs:
           gh release create alpha "$JAR" --prerelease --target "$GITHUB_SHA" \
             --title "alpha $FULL_VERSION (${GITHUB_REF_NAME}@${GITHUB_SHA::7})" \
             --notes "Automatic build of ${GITHUB_REF_NAME}@${GITHUB_SHA}, passed the game tests and the Bedrock test. Unstable, use at your own risk."
-      # pushing a tag like v1.21.1 publishes a normal release
+      # pushing a tag like v1.22.1 publishes a normal release
       - name: publish release
         if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
         run: |
