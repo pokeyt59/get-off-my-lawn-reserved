@@ -408,6 +408,11 @@ GEYSER_CONFIG = """\
 config-version: 8
 java:
   auth-type: {auth}
+bedrock:
+  # The test client connects over RakNet. Geyser only listens for NetherNet by default now, and takes RakNet next
+  # to it when NetherNet gets a UDP port of its own.
+  transport: both
+  webrtc-port: 19133
 advanced:
   bedrock:
     validate-bedrock-login: false
