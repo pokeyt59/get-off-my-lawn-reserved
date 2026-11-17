@@ -164,7 +164,8 @@ final class E2ECommands {
 
     /**
      * Whether "Select by name" (adding players to a claim) finds the player by the name they chose, without Floodgate's
-     * prefix. Test servers run in offline mode, so the lookup doesn't ask Mojang and can run on the server thread.
+     * prefix. The bot is in the server's name cache since it joined, so this doesn't ask Mojang and can run on the
+     * server thread.
      */
     private static boolean foundByOwnName(ServerPlayer player) {
         var name = player.getScoreboardName();

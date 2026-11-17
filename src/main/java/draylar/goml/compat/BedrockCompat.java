@@ -3,7 +3,9 @@ package draylar.goml.compat;
 import draylar.goml.GetOffMyLawn;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.CachedUserNameToIdResolver;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.UserNameToIdResolver;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.VisibleForTesting;
@@ -12,6 +14,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Files;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -79,9 +82,9 @@ public final class BedrockCompat {
     }
 
     /**
-     * Looks a player up in the server's name cache like vanilla does, but also finds Bedrock players by the name they
-     * chose, without Floodgate's prefix. May ask Mojang about the name (in online mode), so don't call this on the
-     * server thread.
+     * Looks a player up by name like vanilla does, but also finds Bedrock players by the name they chose, without
+     * Floodgate's prefix. For a name that isn't a known Bedrock player's, vanilla's lookup can ask Mojang, so don't
+     * call this on the server thread.
      */
     public static Optional<NameAndId> findByName(MinecraftServer server, String name) {
         return findByName(server, name, namePrefix());
@@ -99,13 +102,14 @@ public final class BedrockCompat {
             var floodgateName = prefix + name.replace(' ', '_');
             floodgateName = floodgateName.substring(0, Math.min(floodgateName.length(), MAX_NAME_LENGTH));
 
-            // Only a Bedrock player who joined before has a Floodgate UUID. For any other name the cache asks Mojang
-            // (online mode) or makes up an offline player.
-            var bedrock = names.get(floodgateName).filter(found -> isFloodgateId(found.id()));
+            // Bedrock players who joined are in the cache. Only the cache is searched: Mojang can't know them, and
+            // vanilla's lookup would ask it about every name that isn't a Bedrock player's. A cached name without a
+            // Floodgate UUID is someone else's, like an offline player made up for a name typed in a command.
+            var bedrock = cached(names, floodgateName).filter(found -> isFloodgateId(found.id()));
 
             if (bedrock.isPresent()) {
                 // Someone who played here under exactly this name is still found by it
-                var exact = names.get(name);
+                var exact = cached(names, name);
                 return exact.isPresent() && hasPlayedHere(server, exact.get().id()) ? exact : bedrock;
             }
         }
@@ -113,9 +117,23 @@ public final class BedrockCompat {
         return names.get(name);
     }
 
-    // Floodgate makes Bedrock players' UUIDs from their Xbox id, the first half is zero (its isFloodgateId)
+    /**
+     * Looks the name up in the server's name cache only, without asking Mojang (or making up an offline player) like
+     * {@link UserNameToIdResolver#get(String)} does for names it doesn't know.
+     */
+    private static Optional<NameAndId> cached(UserNameToIdResolver names, String name) {
+        if (names instanceof CachedUserNameToIdResolver cache) {
+            var entry = cache.profilesByName.get(name.toLowerCase(Locale.ROOT));
+            return entry != null ? Optional.of(entry.nameAndId()) : Optional.empty();
+        }
+        // Another resolver, like the mock of vanilla's game test server, which never asks Mojang: the usual lookup
+        return names.get(name);
+    }
+
+    // Floodgate makes Bedrock players' UUIDs from their Xbox id, so the first half is zero (like its isFloodgateId).
+    // Logins without Xbox authentication get Xbox id 0, the all-zero UUID.
     private static boolean isFloodgateId(UUID uuid) {
-        return uuid.getMostSignificantBits() == 0 && uuid.getLeastSignificantBits() != 0;
+        return uuid.getMostSignificantBits() == 0;
     }
 
     private static boolean hasPlayedHere(MinecraftServer server, UUID uuid) {
