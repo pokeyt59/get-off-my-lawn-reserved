@@ -11,9 +11,11 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.MenuProvider;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -22,10 +24,23 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class RecordingPlayer extends FakePlayer {
     public final List<Packet<?>> packets = new CopyOnWriteArrayList<>();
+    /**
+     * Every menu the server tried to open for this player. Fabric's fake players never open one, so this is how tests
+     * see that a GUI was shown, and which (by its title).
+     */
+    public final List<MenuProvider> menus = new CopyOnWriteArrayList<>();
 
     public RecordingPlayer(ServerLevel level, GameProfile profile) {
         super(level, profile);
         this.connection = new Listener(this);
+    }
+
+    @Override
+    public OptionalInt openMenu(@Nullable MenuProvider provider) {
+        if (provider != null) {
+            this.menus.add(provider);
+        }
+        return super.openMenu(provider);
     }
 
     public List<ClientboundSystemChatPacket> chat() {

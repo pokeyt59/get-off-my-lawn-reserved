@@ -8,7 +8,9 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.world.level.block.Blocks;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +35,10 @@ public class CommandTests {
             var keys = translationKeys(message);
             for (var key : keys) {
                 if (key.startsWith("command.") || key.startsWith("argument.") || key.startsWith("commands.")) {
-                    throw helper.assertionException("/" + command + " failed with " + key + ": " + message.getString());
+                    // An exception thrown by the command is only named in the message's hover text, and isn't logged
+                    var hover = hoverText(message);
+                    throw helper.assertionException("/" + command + " failed with " + key + ": " + message.getString()
+                            + (hover != null ? " (" + hover + ")" : ""));
                 }
             }
             var missing = missingTranslations(message);
@@ -42,6 +47,20 @@ public class CommandTests {
             }
         }
         return sent;
+    }
+
+    @Nullable
+    private static String hoverText(Component component) {
+        if (component.getStyle().getHoverEvent() instanceof HoverEvent.ShowText(var text)) {
+            return text.getString();
+        }
+        for (var sibling : component.getSiblings()) {
+            var text = hoverText(sibling);
+            if (text != null) {
+                return text;
+            }
+        }
+        return null;
     }
 
     private static boolean sentKey(List<Component> messages, String key) {
@@ -186,6 +205,25 @@ public class CommandTests {
             helper.succeed();
         } finally {
             ((GomlPlayer) admin).goml_setAdminMode(false);
+            TestPermissions.revoke(admin.getUUID());
+            remove(helper, claim);
+        }
+    }
+
+    @GameTest
+    public void adminListOpensAnotherPlayersClaims(GameTestHelper helper) {
+        var owner = player(helper, "AlOwner");
+        var admin = player(helper, "AlAdmin");
+        var claim = claim(helper, CENTER, 2, owner.getUUID());
+        TestPermissions.grant(admin.getUUID());
+        try {
+            run(helper, admin, "goml admin list AlOwner");
+            check(helper, !admin.menus.isEmpty(), "/goml admin list didn't open a claim list");
+            var title = admin.menus.getLast().getDisplayName();
+            check(helper, translationKeys(title).contains("text.goml.someones_claims") && mentions(title, "AlOwner"),
+                    "/goml admin list opened \"" + title.getString() + "\" instead of AlOwner's claims");
+            helper.succeed();
+        } finally {
             TestPermissions.revoke(admin.getUUID());
             remove(helper, claim);
         }

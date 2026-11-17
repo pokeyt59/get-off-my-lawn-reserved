@@ -1,7 +1,6 @@
 package draylar.goml.ui;
 
 import com.jamieswhiteshirt.rtree3i.Entry;
-import com.mojang.authlib.GameProfile;
 import draylar.goml.api.Claim;
 import draylar.goml.api.ClaimBox;
 import draylar.goml.api.ClaimUtils;
@@ -13,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.server.players.NameAndId;
 import org.jetbrains.annotations.ApiStatus;
 
 import java.util.ArrayList;
@@ -26,7 +26,7 @@ public class ClaimListGui extends PagedGui {
 
     private final List<Entry<ClaimBox, Claim>> claimList = new ArrayList<>();
 
-    protected ClaimListGui(ServerPlayer player, GameProfile target) {
+    protected ClaimListGui(ServerPlayer player, NameAndId target) {
         super(player, null);
 
         for (var world : player.level().getServer().getAllLevels()) {
@@ -40,7 +40,7 @@ public class ClaimListGui extends PagedGui {
         this.updateDisplay();
     }
 
-    public static void open(ServerPlayer player, GameProfile target) {
+    public static void open(ServerPlayer player, NameAndId target) {
         new ClaimListGui(player, target).open();
     }
 

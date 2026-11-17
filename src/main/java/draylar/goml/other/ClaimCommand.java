@@ -4,7 +4,6 @@ import java.net.URI;
 import java.security.Permission;
 
 import com.jamieswhiteshirt.rtree3i.RTreeMap;
-import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
@@ -35,6 +34,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -91,7 +91,7 @@ public class ClaimCommand {
 
                     .then(literal("list")
                             .requires(FabricPermissionBridge.require(id("command/list"), true))
-                            .executes(context -> openList(context, context.getSource().getPlayer().getGameProfile()))
+                            .executes(context -> openList(context, context.getSource().getPlayerOrException().nameAndId()))
                     )
 
                     .then(literal("escape")
@@ -149,13 +149,15 @@ public class ClaimCommand {
                                     .requires(FabricPermissionBridge.require(id("command/list"), true))
                                     .then(Commands.argument("player", GameProfileArgument.gameProfile())
                                             .executes(context -> {
-                                                var player = GameProfileArgument.getGameProfiles(context, "player").toArray(new GameProfile[0]);
+                                                var targets = GameProfileArgument.getGameProfiles(context, "player");
 
-                                                if (player.length == 0) {
-                                                    context.getSource().sendSuccess(() -> Component.translatable("argument.player.unknown").withStyle(ChatFormatting.RED), false);
+                                                // Vanilla already refuses an unknown name or a selector matching nobody, this is in case it stops
+                                                if (targets.isEmpty()) {
+                                                    context.getSource().sendFailure(Component.translatable("argument.player.unknown"));
+                                                    return 0;
                                                 }
 
-                                                return openList(context, player[0]);
+                                                return openList(context, targets.iterator().next());
                                             })
                                     )
                             )
@@ -417,9 +419,9 @@ public class ClaimCommand {
         return 1;
     }
 
-    private static int openList(CommandContext<CommandSourceStack> context, GameProfile target) throws CommandSyntaxException {
+    private static int openList(CommandContext<CommandSourceStack> context, NameAndId target) throws CommandSyntaxException {
 
-        ClaimListGui.open(context.getSource().getPlayer(), target);
+        ClaimListGui.open(context.getSource().getPlayerOrException(), target);
 
         return 1;
     }

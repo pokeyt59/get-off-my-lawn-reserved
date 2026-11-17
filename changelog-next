@@ -14,6 +14,7 @@
 - Unknown or misspelled options in getoffmylawn.json are now logged with a suggestion (e.g. 'updatechannel', did you mean 'updateChannel'?), instead of silently disappearing from the file.
 - Added `/goml admin update` to check for updates right away (and download them with autoUpdate on). `/goml admin reload` only checks for updates when the update options changed.
 - Fixed command messages (trust, untrust, escape, help, admin info...) showing raw translation keys instead of text.
+- Fixed `/goml admin list <player>` failing with "An unexpected error occurred" instead of showing that player's claims.
 - Fixed `%goml:claim_owners%` showing UUIDs instead of names (the UUID version is now `%goml:claim_owners_uuid%`), and escaped colons (`\:`) in `%goml:claim_info%`'s argument.
 - The claim limit (`maxClaimsPerPlayer` / `goml.claim_limit`) now counts claims in all dimensions instead of per dimension (`goml.claim_limit/<dimension>` still counts only that dimension), and the limit message shows the limit.
 - Chaos Zone and Lake Spirit's Grace refresh their effects about once a second instead of every tick, and remove them when you leave.
