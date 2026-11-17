@@ -376,9 +376,12 @@ def fabric_api_module(fabric_api_version, module):
     raise RuntimeError(f"{module} isn't in the Fabric API {fabric_api_version} POM")
 
 
+# white-list is set because Minecraft 26.3 turns the whitelist on for servers that don't say, and the test players
+# aren't on it
 SERVER_PROPERTIES = """\
 online-mode=false
 enforce-secure-profile=false
+white-list=false
 spawn-protection=0
 view-distance=4
 simulation-distance=4
