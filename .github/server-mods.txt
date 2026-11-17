@@ -55,7 +55,7 @@ hopo-better-mineshaft | Hopo Better Mineshaft | 1.3.7
 hopo-better-underwater-ruins | Hopo Better Underwater Ruins | 1.2.8
 inventory-sorter | Inventory Sorter | 3.0.0
 inventory-totem | Inventory Totem | 3.4
-invisible-frames | Invisible Frames | 2.0.1+26.2
+invisible-frames-mod | Invisible Frames | 2.0.1+26.2
 jade | Jade | 26.2.9+fabric
 jei | Just Enough Items | 30.15.0.98
 just-enough-resources-jer | Just Enough Resources | 1.11.0.41
@@ -65,7 +65,7 @@ let-me-despawn | LetMeDespawn | 1.26.7.3
 lithium | Lithium | 0.25.2+mc26.2
 lithostitched | Lithostitched | 1.7.13
 mes-moogs-end-structures | MoogsEndStructures | 2.0.3
-mineable-spawners | Mineable Spawner | 1-v2.3.9
+mineable-spawner | Mineable Spawner | 1-v2.3.9
 mns-moogs-nether-structures | MoogsNetherStructures | 3.0.0
 modify-player-data | Modify Player Data | 0.4.2-26.2
 moogs-structure-lib | Moog's Structure Lib | 3.0.6+fabric
