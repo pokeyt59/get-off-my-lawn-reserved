@@ -87,16 +87,15 @@ public final class BedrockCompat {
      * call this on the server thread.
      */
     public static Optional<NameAndId> findByName(MinecraftServer server, String name) {
-        return findByName(server, name, namePrefix());
+        return findByName(server, server.services().nameToIdCache(), name, namePrefix());
     }
 
     /**
-     * {@link #findByName(MinecraftServer, String)} with the given Floodgate prefix, so tests don't need Floodgate.
+     * {@link #findByName(MinecraftServer, String)} with the given name lookup and Floodgate prefix, so tests need
+     * neither Floodgate nor Mojang (game test servers only have a mock name lookup).
      */
     @VisibleForTesting
-    public static Optional<NameAndId> findByName(MinecraftServer server, String name, String prefix) {
-        var names = server.services().nameToIdCache();
-
+    public static Optional<NameAndId> findByName(MinecraftServer server, UserNameToIdResolver names, String name, String prefix) {
         if (!prefix.isEmpty() && !name.startsWith(prefix)) {
             // Floodgate's name for them: its prefix first, spaces as underscores (its default), cut to fit
             var floodgateName = prefix + name.replace(' ', '_');
