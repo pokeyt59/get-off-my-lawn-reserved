@@ -115,7 +115,7 @@ Every push is built once, then tested in parallel on separate test servers befor
 (`.github/workflows/build.yml`):
 
 * **Game tests** (`src/gametest`): a standalone Fabric server with the built jar runs GOML's game tests. Fake players
-  break, use and attack things in claims. The tests also cover fluids, pistons, dispensers, falling blocks,
+  break, use, attack and trample things in claims. The tests also cover fluids, pistons, dispensers, falling blocks,
   explosions, augments, `/goml` commands (including every message's translation) and claim storage.
 * **Compat**: the same tests next to the performance and gameplay mods listed in `.github/test-mods.txt`.
 * **Bedrock**: a Bedrock client (`.github/bedrock-test`) joins through Geyser. It checks that GOML detects it, that

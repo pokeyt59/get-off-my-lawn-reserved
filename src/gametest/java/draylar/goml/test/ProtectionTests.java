@@ -216,6 +216,44 @@ public class ProtectionTests {
         }
     }
 
+    private static void landOn(GameTestHelper helper, Entity entity, BlockPos relative) {
+        var level = helper.getLevel();
+        var pos = helper.absolutePos(relative);
+        var state = level.getBlockState(pos);
+        // What Minecraft calls when an entity lands on a block. From 3 blocks up, farmland is always trampled.
+        state.getBlock().fallOn(level, state, pos, entity, 3);
+    }
+
+    /**
+     * Trampling doesn't go through an event, FarmlandBlock is patched for it. The claim covers x 4..6, z 3..5 and the
+     * floor below.
+     */
+    @GameTest
+    public void farmlandIsOnlyTrampledByThoseWhoCanBuild(GameTestHelper helper) {
+        floor(helper);
+        var owner = player(helper, "FaOwner");
+        var stranger = player(helper, "FaStranger");
+        var claim = claim(helper, new BlockPos(5, 1, 4), 1, owner.getUUID());
+        var claimed = new BlockPos(5, 0, 3);
+        var unclaimed = new BlockPos(1, 0, 1);
+        try {
+            set(helper, claimed, Blocks.FARMLAND);
+            set(helper, unclaimed, Blocks.FARMLAND);
+
+            landOn(helper, stranger, claimed);
+            check(helper, blockAt(helper, claimed) == Blocks.FARMLAND, "A stranger trampled farmland inside a claim");
+
+            landOn(helper, stranger, unclaimed);
+            check(helper, blockAt(helper, unclaimed) != Blocks.FARMLAND, "Farmland in the wilderness wasn't trampled (the test doesn't trample at all)");
+
+            landOn(helper, owner, claimed);
+            check(helper, blockAt(helper, claimed) != Blocks.FARMLAND, "The owner couldn't trample farmland in their claim");
+            helper.succeed();
+        } finally {
+            remove(helper, claim);
+        }
+    }
+
     /**
      * GOML's default allowed_interactions entity tag lets anyone ride minecarts and boats in claims, but not break them.
      */

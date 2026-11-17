@@ -5,10 +5,14 @@ import draylar.goml.block.augment.GreeterAugmentBlock;
 import draylar.goml.other.StatusEnum;
 import draylar.goml.registry.GOMLBlocks;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.level.GameType;
 
 import static draylar.goml.test.GomlTestUtil.*;
@@ -196,6 +200,67 @@ public class AugmentTests {
             claim.setData(GreeterAugmentBlock.MESSAGE_KEY, " ");
             greeter.onPlayerEnter(claim, visitor);
             check(helper, visitor.messages(false).size() == 1, "The greeter sent a blank greeting");
+            helper.succeed();
+        } finally {
+            remove(helper, claim);
+        }
+    }
+
+    /**
+     * Ender Binding acts on endermen instead of players. An enderman hit by a projectile tries to teleport away
+     * (64 attempts per hit), which the augment has to stop for as long as it's in the claim.
+     */
+    @GameTest
+    public void enderBindingKeepsEndermenFromTeleporting(GameTestHelper helper) {
+        floor(helper);
+        var owner = player(helper, "EbOwner");
+        var claim = claim(helper, CENTER, 2, owner.getUUID());
+        var augmentPos = helper.absolutePos(CENTER.east());
+        var enderman = helper.spawn(EntityTypes.ENDERMAN, CENTER.west());
+        try {
+            var level = helper.getLevel();
+            // Without an attacker, so nothing decides whether the enderman may be hurt
+            var projectile = new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(DamageTypes.ARROW));
+            var start = enderman.position();
+
+            claim.addAugment(augmentPos, GOMLBlocks.ENDER_BINDING.getFirst());
+            enderman.hurtServer(level, projectile, 0);
+            check(helper, enderman.position().equals(start), "An enderman teleported inside a claim with Ender Binding");
+
+            // The same hit without the augment has to move it, or the check above proves nothing. Its teleports pick
+            // random spots around it, the first hit normally finds one (the test floor is one of them).
+            claim.removeAugment(augmentPos);
+            for (int hit = 0; hit < 100 && enderman.position().equals(start); hit++) {
+                enderman.hurtServer(level, projectile, 0);
+            }
+            check(helper, !enderman.position().equals(start), "The enderman doesn't teleport without Ender Binding either (the test can't tell what the augment does)");
+            helper.succeed();
+        } finally {
+            enderman.discard();
+            remove(helper, claim);
+        }
+    }
+
+    /**
+     * Claim covers x/z 3..5. Players the Force Field blocks are moved out past its border, the way /goml escape does.
+     */
+    @GameTest
+    public void forceFieldMovesStrangersOut(GameTestHelper helper) {
+        floor(helper);
+        var owner = player(helper, "FfOwner");
+        var stranger = player(helper, "FfStranger");
+        var claim = claim(helper, CENTER, 1, owner.getUUID());
+        var forceField = GOMLBlocks.FORCE_FIELD.getFirst();
+        try {
+            claim.addAugment(helper.absolutePos(CENTER.east()), forceField);
+            var ownerPos = owner.position();
+            check(helper, claim.getClaimBox().minecraftBox().contains(stranger.position()), "The stranger doesn't start inside the claim");
+
+            forceField.playerTick(claim, owner);
+            check(helper, owner.position().equals(ownerPos), "The Force Field moved the claim's owner");
+
+            forceField.playerTick(claim, stranger);
+            check(helper, !claim.getClaimBox().minecraftBox().contains(stranger.position()), "The Force Field left a stranger inside the claim at " + stranger.position());
             helper.succeed();
         } finally {
             remove(helper, claim);
