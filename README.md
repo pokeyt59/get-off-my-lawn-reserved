@@ -119,8 +119,9 @@ Every push is built once, then tested in parallel on separate test servers befor
   explosions, augments, `/goml` commands (including every message's translation) and claim storage.
 * **Compat**: the same tests next to the performance and gameplay mods listed in `.github/test-mods.txt`.
 * **Bedrock**: a Bedrock client (`.github/bedrock-test`) joins through Geyser. It checks that GOML detects it, that
-  protection and enter/leave messages arrive translated, that goggles draw particles, that Chaos Zone doesn't spam
-  effect updates, and that menus open. A second boot checks detection through Floodgate.
+  "Select by name" finds it by its own name, that protection and enter/leave messages arrive translated, that goggles
+  draw particles, that Chaos Zone doesn't spam effect updates, and that menus open. A second boot checks detection
+  through Floodgate.
 
 The alpha (and releases) only publish when all of these pass. Locally, `./gradlew runGameTest` runs the game tests.
 
@@ -133,7 +134,7 @@ tests with all of those mods, then a normal server with them:
 * Chunky pre-generation around those claims, after which each claim's loaded chunk count must still be right;
 * BlueMap's claim markers;
 * a restart, after which the claims must still be there;
-* a Bedrock player through Geyser and Floodgate.
+* a Bedrock player through Geyser and Floodgate, with the Bedrock test's checks (Floodgate adds a prefix to its name).
 
 After updating the server's mods, update the versions in that file.
 

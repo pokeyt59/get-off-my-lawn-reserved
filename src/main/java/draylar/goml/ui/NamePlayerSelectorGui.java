@@ -1,6 +1,7 @@
 package draylar.goml.ui;
 
 import com.mojang.authlib.GameProfile;
+import draylar.goml.compat.BedrockCompat;
 import draylar.goml.registry.GOMLTextures;
 import eu.pb4.sgui.api.SguiUtils;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
@@ -56,7 +57,10 @@ public class NamePlayerSelectorGui extends AnvilInputGui {
 
         if (this.timer-- == 0 && this.currentName != null) {
             this.updateIcon();
-            CompletableFuture.supplyAsync(() -> this.player.level().getServer().services().nameToIdCache().get(this.currentName)).thenAccept((profile) -> {
+            var server = this.player.level().getServer();
+            var name = this.currentName;
+            // Also finds Bedrock players by their own name, without Floodgate's prefix
+            CompletableFuture.supplyAsync(() -> BedrockCompat.findByName(server, name)).thenAccept((profile) -> {
                 this.player.level().getServer().execute(() -> {
                     if (profile.isPresent()) {
                         this.selectedPlayer = profile.get();

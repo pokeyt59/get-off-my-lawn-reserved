@@ -16,6 +16,7 @@
       "draylar.goml.test.AugmentTests",
       "draylar.goml.test.CommandTests",
       "draylar.goml.test.DataTests",
+      "draylar.goml.test.BedrockTests",
       "draylar.goml.other.ClaimMessagesTests"
     ]
   },

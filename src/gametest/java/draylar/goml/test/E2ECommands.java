@@ -103,7 +103,9 @@ final class E2ECommands {
             case "detect" -> "bedrock=" + BedrockCompat.isBedrock(player)
                     + " floodgate=" + askApi("org.geysermc.floodgate.api.FloodgateApi", "getInstance", "isFloodgatePlayer", player.getUUID())
                     + " geyser=" + askApi("org.geysermc.geyser.api.GeyserApi", "api", "isBedrockPlayer", player.getUUID())
-                    + " name=" + player.getScoreboardName();
+                    + " name=" + player.getScoreboardName()
+                    + " prefix=" + BedrockCompat.namePrefix()
+                    + " foundByOwnName=" + foundByOwnName(player);
             case "setup" -> {
                 cleanup(player);
                 player.setGameMode(GameType.SURVIVAL);
@@ -158,6 +160,17 @@ final class E2ECommands {
         } catch (Exception e) {
             return "error:" + e.getClass().getSimpleName();
         }
+    }
+
+    /**
+     * Whether "Select by name" (adding players to a claim) finds the player by the name they chose, without Floodgate's
+     * prefix. Test servers run in offline mode, so the lookup doesn't ask Mojang and can run on the server thread.
+     */
+    private static boolean foundByOwnName(ServerPlayer player) {
+        var name = player.getScoreboardName();
+        var prefix = BedrockCompat.namePrefix();
+        var ownName = name.startsWith(prefix) ? name.substring(prefix.length()) : name;
+        return BedrockCompat.findByName(player.level().getServer(), ownName).map(NameAndId::id).filter(player.getUUID()::equals).isPresent();
     }
 
     private static int gridX(int index) {

@@ -141,6 +141,8 @@ async function run () {
 
   const detect = await step('detect')
   record('GOML detects the Bedrock player', detect.text.includes('bedrock=true'), detect.text)
+  // With Floodgate the bot is ".BedrockBot", "Select by name" (adding players to a claim) still finds it as "BedrockBot"
+  record('Select by name finds the player by their own name', detect.text.includes('foundByOwnName=true'), detect.text)
 
   const setup = await step('setup')
   record('Test claim created', setup.ok, setup.text)
