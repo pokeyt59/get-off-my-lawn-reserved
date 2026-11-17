@@ -27,7 +27,7 @@ git remote add upstream https://github.com/Patbox/get-off-my-lawn-reserved && gi
 | | |
 |---|---|
 | Working branch | `claude/gallant-clarke-p9xawk`, code at `6ce5c99` |
-| Published | The `alpha` pre-release is `1.22.37+26.3`, from run 30 (`3777833`), before the Bedrock lookup fix. Run 32 (`6ce5c99`, the fix) was still running when this was written: if it passed, the alpha is `1.22.39+26.3` |
+| Published | The `alpha` pre-release is `1.22.39+26.3`, from [run 32](https://github.com/pokeyt59/get-off-my-lawn-reserved/actions/runs/44144427120) (`6ce5c99`), every job green (the full mod list job on its second attempt, see below) |
 | Upstream | `Patbox/get-off-my-lawn-reserved` `main` still at `9915f14` (their 1.22.0+26.3), fully merged. Nothing new on 2026-11-17 |
 | Fork `main` | `a0a3c01`, upstream's 26.2 release. Untouched, no PR opened |
 | Older branches | `claude/lucid-hawking-t7p7mf` (`73213b4`, handoff 3) is fully contained in the working branch. `claude/read-this-fully-gq1etl` (`98d34fb`) has nothing left to port: its two remaining fixes are done here, differently (below) |
@@ -63,9 +63,11 @@ one), and a command failing with "An unexpected error occurred" now shows the ex
     job passed and `1.22.37+26.3` was published. The full mod list test failed the same way.
   - [Run 31](https://github.com/pokeyt59/get-off-my-lawn-reserved/actions/runs/44143043306) (`8108e0b`): the build job
     hit Maven Central's rate limit.
-  - [Run 32](https://github.com/pokeyt59/get-off-my-lawn-reserved/actions/runs/44144427120) (`6ce5c99`): still
-    running when this was written. Check it first: its full mod list job is the first end-to-end run of the
-    cache-only lookup, with the bot joining through Floodgate. All 13 of the bot's checks should pass.
+  - [Run 32](https://github.com/pokeyt59/get-off-my-lawn-reserved/actions/runs/44144427120) (`6ce5c99`): every
+    gating job passed and `1.22.39+26.3` was published. The full mod list test's first attempt failed 2 checks
+    because Floodgate didn't handle the bot's login at all (see [Found along the way](#found-along-the-way)). Its
+    re-run, same code, passed everything: the bot joined through Floodgate as `.BedrockBot`, all 13 of its checks
+    passed (`foundByOwnName=true`), and no GOML errors were logged.
 - **Not verified locally:** the Bedrock bot (needs Node 24 and a Geyser server, see [Environment](#environment)).
   Its new check is only a real check in the full mod list test, where the bot joins through Floodgate as
   `.BedrockBot`. In the gating Bedrock job it joins through Geyser alone, without a prefix, so it passes trivially
@@ -219,6 +221,12 @@ shouldn't publish.
   `CachedUserNameToIdResolver` with a stand-in `GameProfileRepository`, like `BedrockTests` does. The end-to-end
   servers (Bedrock job, full mod list test) are normal servers with the real cache.
 - **Bedrock logins without Xbox authentication** (the test bot's) get Xbox id 0 from Floodgate, so the all-zero UUID.
+- **The full mod list test's bot sometimes isn't handled by Floodgate.** In run 32's first attempt the bot logged in
+  as plain `BedrockBot`: `restart.log` had no "Floodgate player … joined" line, and both GOML and Floodgate's API
+  said it wasn't a Bedrock player, so "GOML detects the Bedrock player" failed. It connected one second after the
+  server finished starting (two in run 29, which worked), and the re-run passed, so it looks like a race at startup.
+  If it happens again, look at what Floodgate needs before it handles logins, and wait for that before running the
+  bot.
 - **Floodgate's players** have UUIDs with a zero first half (made from the Xbox id), and names with its prefix.
   Its bundled `config.yml` defaults to `username-prefix: "."` and `replace-spaces: true` (spaces become `_`). Java
   names can't be longer than 16 characters, so the lookup also cuts the prefixed name to 16; how Floodgate shortens
