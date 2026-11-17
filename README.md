@@ -126,7 +126,8 @@ The alpha (and releases) only publish when all of these pass. Locally, `./gradle
 
 A **full mod list test** runs alongside them but only reports, so the alpha doesn't wait for it. It uses the whole mod
 list of the server the alphas are installed on (`.github/server-mods.txt`), at that server's versions where Modrinth
-has them. It runs the game tests with all of those mods, then a normal server with them:
+has them for the Minecraft version being built, and otherwise at each mod's newest build for it. It runs the game
+tests with all of those mods, then a normal server with them:
 
 * claims on generated terrain;
 * Chunky pre-generation around those claims, after which each claim's loaded chunk count must still be right;

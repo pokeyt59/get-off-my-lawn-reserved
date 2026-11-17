@@ -4,7 +4,7 @@
 Each test job assembles a server from the jars the build job made, so no Gradle or compiling is needed there:
 
   setup     Fabric server launcher, Fabric API, Polymer, the GOML and test mod jars, and optional extra mods (at the
-            versions a mods file names) or Geyser
+            versions a mods file names, when those are for this Minecraft version) or Geyser
   gametest  runs GOML's game tests (src/gametest) on it and turns the JUnit report into the job summary
   boot      starts it normally, waits until it's up (and for expected log lines), checks the log and stops it
   bedrock   starts it with Geyser and runs the Bedrock bot (.github/bedrock-test/bot.mjs) against it
@@ -174,8 +174,8 @@ def pinned_version(versions, pin, minecraft):
 
 class ModLine:
     """A line of a mods file: "slug | Name | version | tags". Only the slug is needed; with the name Modrinth is
-    searched when the slug doesn't exist; with the version that version is used; a https:// URL instead of the slug is
-    downloaded as-is."""
+    searched when the slug doesn't exist; with the version that version is used when it's for this Minecraft version
+    (otherwise the mod's newest build for it); a https:// URL instead of the slug is downloaded as-is."""
 
     def __init__(self, line):
         parts = [part.strip() for part in line.split("|")]
@@ -195,6 +195,11 @@ def read_mods_file(path):
     return lines
 
 
+# How a mod with a version in the mods file got its build, shown in the job summary
+YOUR_VERSION = "your version"
+NEWEST_FOR = "newest for"
+
+
 class Mods:
     """Installs mods from Modrinth with their required dependencies, and remembers what it did for the summary."""
 
@@ -208,7 +213,7 @@ class Mods:
         self.pending = []  # (project id, needed by, required) dependencies still to install
         self.rows = []
         self.skipped = []
-        self.pinned = self.fallback = 0
+        self.pinned = self.updated = self.fallback = 0
 
     def prefetch(self, slugs):
         """Looks up many projects in one request instead of one each"""
@@ -250,7 +255,8 @@ class Mods:
         return None
 
     def resolve(self, slug, name, pin):
-        """(project, version, how) for a mod, the project is None when it isn't on Modrinth"""
+        """(project, version, how) for a mod, the project is None when it isn't on Modrinth. Without a version, how
+        says why when there is more to say than "no build for this Minecraft version"."""
         project = self.project(slug)
         candidates = [project] if project is not None else []
         # A wrong slug can point at another mod: then the name decides
@@ -261,10 +267,19 @@ class Mods:
             # Projects named like the mod before the slug's project
             candidates.sort(key=lambda candidate: not similar(candidate["title"], name))
         if pin:
-            for candidate in candidates:
-                version = pinned_version(self.version_list(candidate["id"]), pin, self.minecraft)
-                if version:
-                    return candidate, version, "your version"
+            listed = [(candidate, pinned_version(self.version_list(candidate["id"]), pin, self.minecraft)) for candidate in candidates]
+            listed = [(candidate, version) for candidate, version in listed if version]
+            for candidate, version in listed:
+                if self.minecraft in version["game_versions"]:
+                    return candidate, version, YOUR_VERSION
+            # The list's version is for another Minecraft version, like right after a Minecraft update, when a server
+            # gets each mod's build for the new version. Mods without one can stop the server from starting.
+            for candidate, version in listed:
+                newest = self.newest(candidate["id"])
+                if newest:
+                    return candidate, newest, f"{NEWEST_FOR} {self.minecraft}, {pin} is for another Minecraft version"
+            if listed:
+                return listed[0][0], None, f"{pin} is for another Minecraft version"
         for candidate in candidates:
             version = self.newest(candidate["id"])
             if version:
@@ -279,15 +294,17 @@ class Mods:
         if project["id"] in self.installed:
             return True
         if version is None:
-            return self.skip(slug, project["title"], f"no Fabric build for {self.minecraft}", required)
+            return self.skip(slug, project["title"], f"no Fabric build for {self.minecraft}" + (f", {how}" if how else ""), required)
 
         file = primary_file(version)
         download(file["url"], self.directory / file["filename"], {"sha512": file["hashes"].get("sha512"), "sha1": file["hashes"].get("sha1")})
         self.installed[project["id"]] = version
         self.versions[project["slug"]] = version["version_number"]
         if pin:
-            if how == "your version":
+            if how == YOUR_VERSION:
                 self.pinned += 1
+            elif how.startswith(NEWEST_FOR):
+                self.updated += 1
             else:
                 self.fallback += 1
         why = f"{reason}, {how}" if pin else reason
@@ -489,7 +506,9 @@ def setup(args):
 
     table = ["| Mod | Version | | Why |", "|---|---|---|---|"]
     table += [f"| {title} | {version} | {kind} | {reason} |" for title, version, kind, reason in mods.rows]
-    pinned = f", {mods.pinned} at your version, {mods.fallback} at the newest because yours isn't on Modrinth" if mods.pinned or mods.fallback else ""
+    pinned = f", {mods.pinned} at your version, {mods.fallback} at the newest because yours isn't on Modrinth" if mods.pinned or mods.updated or mods.fallback else ""
+    if mods.updated:
+        pinned += f", {mods.updated} at the newest for {minecraft} because yours is for another Minecraft version"
     summary(f"### {args.title}: {len(mods.rows)} mods{pinned}\n\n<details><summary>Mod list</summary>\n\n" + "\n".join(table) + "\n\n</details>\n")
     if mods.skipped:
         summary(f"Skipped {len(mods.skipped)}: " + ", ".join(f"{name} ({why})" for name, why in mods.skipped) + "\n")

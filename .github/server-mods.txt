@@ -5,12 +5,14 @@
 #
 # slug: the Modrinth project (modrinth.com/mod/<slug>). When it doesn't exist or is another mod, Modrinth is searched
 #       for the name.
-# version: what the server's mod list shows for the mod. That version is used when Modrinth has it (also when it's
-#       listed for another Minecraft version), otherwise the newest build for this Minecraft version.
+# version: what the server's mod list shows for the mod. That version is used when Modrinth has it for the Minecraft
+#       version being tested. Otherwise the mod's newest build for that Minecraft version is used, so the list keeps
+#       working right after a Minecraft update, and a mod without a build for it is left out.
 # A mod that isn't on Modrinth can be a direct download link instead: https://.../file.jar | Name
 # Add "| not-gametest" after the version to leave a mod out of the game test server (it still runs on the full server).
 # Mods Modrinth doesn't have for Fabric are listed as skipped in the job summary, required dependencies are added.
-# After updating the server's mods, update the versions here.
+# After updating the server's mods, update the versions here. They're still the ones from the server on Minecraft
+# 26.2, GOML's builds for 26.3 are tested next to each mod's newest 26.3 build until then.
 # Floodgate 2.2.6-SNAPSHOT: newest build from GeyserMC (--geyser / --floodgate)
 # Geyser-Fabric 2.11.1-SNAPSHOT: newest build from GeyserMC (--geyser / --floodgate)
 # Get Off My Lawn ReServed 1.21.0+26.2: the jar this run built
